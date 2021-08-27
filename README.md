@@ -14,7 +14,7 @@ This plugin requires the following minimum version of Binary Ninja:
 
 ## License
 
-This plugin is released under an [MIT license](./license).
+This plugin is released under an [MIT license](./LICENSE).
 
 ## Metadata Version
 
