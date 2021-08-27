@@ -1,10 +1,10 @@
-# Calltable
+# Calltree
 Author: **Eric Biazo**
 
-Calltable generator for function
+Calltree generator for function
 
 ## Description:
-Generates call table
+Generates call tree
 
 ## Minimum Version
 

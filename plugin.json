@@ -9,7 +9,7 @@
     "api": [
         "python3"
     ],
-    "description": "Call Tree.",
+    "description": "Call Tree",
     "longdescription": "",
     "license": {
         "name": "MIT",
