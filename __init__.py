@@ -34,7 +34,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.cur_func = None
         self.cur_offset = 0
         self.binary_view = None
-        self.func_depth = 2
+        self.func_depth = 5
 
         # Create a QHBoxLayout instance
         call_layout = QVBoxLayout()
@@ -71,7 +71,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.incall_tree_model.setHorizontalHeaderLabels(["Incoming Calls"])
         incall_root_node = self.incall_tree_model.invisibleRootItem()
 
-        cur_func_callers = cur_func.callers
+        cur_func_callers = list(set(cur_func.callers))
         root_std_items = []
 
         # Set root std Items
@@ -98,7 +98,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.outcall_tree_model.setHorizontalHeaderLabels(["Outgoing Calls"])
         outcall_root_node = self.outcall_tree_model.invisibleRootItem()
 
-        cur_func_callees = cur_func.callees
+        cur_func_callees = list(set(cur_func.callees))
         root_std_items = []
 
         # Set root std Items
