@@ -34,7 +34,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.cur_func = None
         self.cur_offset = 0
         self.binary_view = None
-        self.func_depth = 5
+        self.func_depth = 3
 
         # Create a QHBoxLayout instance
         call_layout = QVBoxLayout()
