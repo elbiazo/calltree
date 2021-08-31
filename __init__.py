@@ -57,7 +57,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.setLayout(cur_func_layout)
 
     def set_func_callers(self, cur_func, cur_std_item, depth=0):
-        cur_func_callers = cur_func.callers
+        cur_func_callers = list(set(cur_func.callers))
         if depth <= self.func_depth:
             if cur_func_callers:
                 for cur_func_caller in cur_func_callers:
@@ -84,7 +84,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         incall_root_node.appendRows(root_std_items)
 
     def set_func_callees(self, cur_func, cur_std_item, depth=0):
-        cur_func_callees = cur_func.callees
+        cur_func_callees = list(set(cur_func.callees))
         if depth <= self.func_depth:
             if cur_func_callees:
                 for cur_func_callee in cur_func_callees:
