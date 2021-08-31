@@ -1,4 +1,5 @@
 from binaryninjaui import DockHandler, DockContextHandler, UIActionHandler
+from binaryninja import log_info
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,7 +25,6 @@ class StandardItem(QStandardItem):
         self.setFont(fnt)
         self.setText(txt)
 
-
 class CallTreeWidget(QWidget, DockContextHandler):
     def __init__(self, parent, name):
         QWidget.__init__(self, parent)
@@ -34,7 +34,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.cur_func = None
         self.cur_offset = 0
         self.binary_view = None
-        self.func_depth = 3
+        self.func_depth = 2
 
         # Create a QHBoxLayout instance
         call_layout = QVBoxLayout()
@@ -47,6 +47,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
 
         self.incall_tree_view.setModel(self.incall_tree_model)
         self.outcall_tree_view.setModel(self.outcall_tree_model)
+        self.outcall_tree_view.doubleClicked.connect(self.update_outgoing)
         cur_func_layout = QVBoxLayout()
         self.cur_func_label = QLabel("None")
 
@@ -55,6 +56,19 @@ class CallTreeWidget(QWidget, DockContextHandler):
         call_layout.addWidget(self.incall_tree_view)
         call_layout.addWidget(self.outcall_tree_view)
         self.setLayout(cur_func_layout)
+
+    def update_outgoing(self, index):
+        cur_item_index = self.outcall_tree_view.selectedIndexes()[0]
+        cur_func_name = cur_item_index.model().itemFromIndex(index).text()
+        has_child = cur_item_index.model().hasChildren(index)
+        cur_item = cur_item_index.model().itemFromIndex(index)
+
+        if not has_child:
+            log_info('getting caller')
+            cur_func = self.binary_view.get_functions_by_name(cur_func_name)[0]
+            self.set_func_callers(cur_func, cur_item)
+        else:
+            log_info('not getting child')
 
     def set_func_callers(self, cur_func, cur_std_item, depth=0):
         cur_func_callers = list(set(cur_func.callers))
