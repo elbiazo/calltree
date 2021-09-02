@@ -104,7 +104,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
                 for cur_func_callee in cur_func_callees:
                     new_std_item = StandardItem(cur_func_callee.name, 12)
                     cur_std_item.appendRow(new_std_item)
-                    self.set_func_callers(cur_func_callee, new_std_item, depth + 1)
+                    self.set_func_callees(cur_func_callee, new_std_item, depth + 1)
 
     def update_outgoing_widget(self, cur_func):
         # Clear previous calls
