@@ -1,4 +1,5 @@
 from binaryninjaui import DockHandler, DockContextHandler, UIActionHandler
+from binaryninja import log_info
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -10,19 +11,19 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QStandardItemModel, QStandardItem
 
 
-class StandardItem(QStandardItem):
-    def __init__(self, txt="", font_size=12, set_bold=False, color=QColor(0, 0, 0)):
+class BNFuncItem(QStandardItem):
+    def __init__(self, func, font_size=12, set_bold=False, color=QColor(0, 0, 0)):
         super().__init__()
 
         fnt = QFont("Open Sans", font_size)
         fnt.setBold(set_bold)
 
+        self.func = func
         self.setEditable(False)
-
         # Todo: Add support for binja color
         # self.setForeground(color)
         self.setFont(fnt)
-        self.setText(txt)
+        self.setText(func.name)
 
 
 class CallTreeWidget(QWidget, DockContextHandler):
@@ -47,21 +48,28 @@ class CallTreeWidget(QWidget, DockContextHandler):
 
         self.incall_tree_view.setModel(self.incall_tree_model)
         self.outcall_tree_view.setModel(self.outcall_tree_model)
+        self.outcall_tree_view.doubleClicked.connect(self.goto_func)
         cur_func_layout = QVBoxLayout()
         self.cur_func_label = QLabel("None")
 
         cur_func_layout.addWidget(self.cur_func_label)
         cur_func_layout.addLayout(call_layout)
-        call_layout.addWidget(self.incall_tree_view)
         call_layout.addWidget(self.outcall_tree_view)
+        call_layout.addWidget(self.incall_tree_view)
         self.setLayout(cur_func_layout)
+
+    def goto_func(self, index):
+        cur_item_index = self.outcall_tree_view.selectedIndexes()[0]
+        cur_func = cur_item_index.model().itemFromIndex(index).func
+        self.binary_view.navigate(self.binary_view.view, cur_func.start)
+
 
     def set_func_callers(self, cur_func, cur_std_item, depth=0):
         cur_func_callers = list(set(cur_func.callers))
         if depth <= self.func_depth:
             if cur_func_callers:
                 for cur_func_caller in cur_func_callers:
-                    new_std_item = StandardItem(cur_func_caller.name, 12)
+                    new_std_item = BNFuncItem(cur_func_caller, 12)
                     cur_std_item.appendRow(new_std_item)
                     self.set_func_callers(cur_func_caller, new_std_item, depth + 1)
 
@@ -77,7 +85,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         # Set root std Items
         if cur_func_callers:
             for cur_func_caller in cur_func_callers:
-                root_std_items.append(StandardItem(cur_func_caller.name, 12))
+                root_std_items.append(BNFuncItem(cur_func_caller, 12))
                 cur_std_item = root_std_items[-1]
                 self.set_func_callers(cur_func_caller, cur_std_item)
 
@@ -88,7 +96,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         if depth <= self.func_depth:
             if cur_func_callees:
                 for cur_func_callee in cur_func_callees:
-                    new_std_item = StandardItem(cur_func_callee.name, 12)
+                    new_std_item = BNFuncItem(cur_func_callee, 12)
                     cur_std_item.appendRow(new_std_item)
                     self.set_func_callees(cur_func_callee, new_std_item, depth + 1)
 
@@ -104,11 +112,12 @@ class CallTreeWidget(QWidget, DockContextHandler):
         # Set root std Items
         if cur_func_callees:
             for cur_func_callee in cur_func_callees:
-                root_std_items.append(StandardItem(cur_func_callee.name, 12))
+                root_std_items.append(BNFuncItem(cur_func_callee, 12))
                 cur_std_item = root_std_items[-1]
-                self.set_func_callers(cur_func_callee, cur_std_item)
+                self.set_func_callees(cur_func_callee, cur_std_item)
 
         outcall_root_node.appendRows(root_std_items)
+
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
