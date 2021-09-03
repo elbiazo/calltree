@@ -32,9 +32,9 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.actionHandler = UIActionHandler()
         self.actionHandler.setupActionHandler(self)
         self.cur_func = None
-        self.cur_offset = 0
+        self.prev_func_offset = None
         self.binary_view = None
-        self.func_depth = 3
+        self.func_depth = 10
 
         # Create a QHBoxLayout instance
         call_layout = QVBoxLayout()
@@ -112,16 +112,20 @@ class CallTreeWidget(QWidget, DockContextHandler):
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
+
         if not cur_funcs:
             self.cur_func_label.setText("None")
             self.incall_tree_model.clear()
             self.incall_tree_model.setHorizontalHeaderLabels(["Incoming Calls"])
             self.outcall_tree_model.setHorizontalHeaderLabels(["Outgoing Calls"])
         else:
-            self.cur_func = cur_funcs[0]
-            self.cur_func_label.setText(self.cur_func.name)
-            self.update_incoming_widget(self.cur_func)
-            self.update_outgoing_widget(self.cur_func)
+            if cur_funcs[0].start != self.prev_func_offset:
+                self.prev_func_offset = cur_funcs[0].start
+                self.prev_func_offset = cur_funcs[0].start
+                self.cur_func = cur_funcs[0]
+                self.cur_func_label.setText(self.cur_func.name)
+                self.update_incoming_widget(self.cur_func)
+                self.update_outgoing_widget(self.cur_func)
 
     def shouldBeVisible(self, view_frame):
         if view_frame is None:
