@@ -10,6 +10,7 @@ Generates call tree
 - [ ] Ability to expand selected function
 - [ ] Ability to expand all functions
 - [ ] Setting and viewing depth of function recursion
+- [ ] Move widget to side bar
 
 ## Minimum Version
 
