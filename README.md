@@ -11,6 +11,7 @@ Generates call tree
 - [ ] Ability to expand all functions
 - [ ] Setting and viewing depth of function recursion
 - [ ] Move widget to side bar
+- [ ] Generating graph on current call tree
 
 ## Minimum Version
 
