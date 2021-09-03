@@ -116,6 +116,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         if not cur_funcs:
             self.cur_func_label.setText("None")
             self.incall_tree_model.clear()
+            self.outcall_tree_model.clear()
             self.incall_tree_model.setHorizontalHeaderLabels(["Incoming Calls"])
             self.outcall_tree_model.setHorizontalHeaderLabels(["Outgoing Calls"])
         else:
