@@ -127,6 +127,7 @@ class CallTreeWidget(QWidget, DockContextHandler):
         cur_funcs = self.binary_view.get_functions_containing(offset)
 
         if not cur_funcs:
+            self.prev_func_offset = None
             self.cur_func_label.setText("None")
             self.incall_tree_model.clear()
             self.outcall_tree_model.clear()
@@ -134,7 +135,6 @@ class CallTreeWidget(QWidget, DockContextHandler):
             self.outcall_tree_model.setHorizontalHeaderLabels(["Outgoing Calls"])
         else:
             if cur_funcs[0].start != self.prev_func_offset:
-                self.prev_func_offset = cur_funcs[0].start
                 self.prev_func_offset = cur_funcs[0].start
                 self.cur_func = cur_funcs[0]
                 self.cur_func_label.setText(self.cur_func.name)
