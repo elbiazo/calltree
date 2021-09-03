@@ -48,7 +48,8 @@ class CallTreeWidget(QWidget, DockContextHandler):
 
         self.incall_tree_view.setModel(self.incall_tree_model)
         self.outcall_tree_view.setModel(self.outcall_tree_model)
-        self.outcall_tree_view.doubleClicked.connect(self.goto_func)
+        self.outcall_tree_view.doubleClicked.connect(self.out_goto_func)
+        self.incall_tree_view.doubleClicked.connect(self.in_goto_func)
         cur_func_layout = QVBoxLayout()
         self.cur_func_label = QLabel("None")
 
@@ -58,11 +59,15 @@ class CallTreeWidget(QWidget, DockContextHandler):
         call_layout.addWidget(self.incall_tree_view)
         self.setLayout(cur_func_layout)
 
-    def goto_func(self, index):
+    def out_goto_func(self, index):
         cur_item_index = self.outcall_tree_view.selectedIndexes()[0]
         cur_func = cur_item_index.model().itemFromIndex(index).func
         self.binary_view.navigate(self.binary_view.view, cur_func.start)
 
+    def in_goto_func(self, index):
+        cur_item_index = self.incall_tree_view.selectedIndexes()[0]
+        cur_func = cur_item_index.model().itemFromIndex(index).func
+        self.binary_view.navigate(self.binary_view.view, cur_func.start)
 
     def set_func_callers(self, cur_func, cur_std_item, depth=0):
         cur_func_callers = list(set(cur_func.callers))
@@ -117,7 +122,6 @@ class CallTreeWidget(QWidget, DockContextHandler):
                 self.set_func_callees(cur_func_callee, cur_std_item)
 
         outcall_root_node.appendRows(root_std_items)
-
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
