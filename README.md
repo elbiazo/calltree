@@ -15,7 +15,7 @@ Generates call tree
 
 This plugin requires the following minimum version of Binary Ninja:
 
- * 1500
+ * 2966
 
 ## License
 
