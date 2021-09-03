@@ -6,11 +6,18 @@ Calltree generator for function
 ## Description:
 Generates call tree
 
+## TODO:
+- [ ] Ability to expand selected function
+- [ ] Ability to expand all functions
+- [ ] Setting and viewing depth of function recursion
+- [ ] Move widget to side bar
+- [ ] Generating graph on current call tree
+
 ## Minimum Version
 
 This plugin requires the following minimum version of Binary Ninja:
 
- * 1500
+ * 2966
 
 ## License
 
