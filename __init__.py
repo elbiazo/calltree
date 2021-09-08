@@ -48,7 +48,7 @@ class BNFuncItem(QStandardItem):
 
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
 # provides callbacks for sidebar events, and must be created with a title.
-class HelloSidebarWidget(SidebarWidget):
+class CalltreeSidebarWidget(SidebarWidget):
     def __init__(self, name, frame, data):
         global instance_id
         SidebarWidget.__init__(self, name)
@@ -187,7 +187,7 @@ class HelloSidebarWidget(SidebarWidget):
         self.m_contextMenuManager.show(self.m_menu, self.actionHandler)
 
 
-class HelloSidebarWidgetType(SidebarWidgetType):
+class CalltreeSidebarWidgetType(SidebarWidgetType):
     def __init__(self):
         # Sidebar icons are 28x28 points. Should be at least 56x56 pixels for
         # HiDPI display compatibility. They will be automatically made theme
@@ -196,7 +196,7 @@ class HelloSidebarWidgetType(SidebarWidgetType):
         icon = QImage(56, 56, QImage.Format_RGB32)
         icon.fill(0)
 
-        # Render an "H" as the example icon
+        # Render an "C" as the example icon
         p = QPainter()
         p.begin(icon)
         p.setFont(QFont("Open Sans", 56))
@@ -204,15 +204,15 @@ class HelloSidebarWidgetType(SidebarWidgetType):
         p.drawText(QRectF(0, 0, 56, 56), Qt.AlignCenter, "C")
         p.end()
 
-        SidebarWidgetType.__init__(self, icon, "Hello")
+        SidebarWidgetType.__init__(self, icon, "Calltree")
 
     def createWidget(self, frame, data):
         # This callback is called when a widget needs to be created for a given context. Different
         # widgets are created for each unique BinaryView. They are created on demand when the sidebar
         # widget is visible and the BinaryView becomes active.
-        return HelloSidebarWidget("Calltree", frame, data)
+        return CalltreeSidebarWidget("Calltree", frame, data)
 
 
 # Register the sidebar widget type with Binary Ninja. This will make it appear as an icon in the
 # sidebar and the `createWidget` method will be called when a widget is required.
-Sidebar.addSidebarWidgetType(HelloSidebarWidgetType())
+Sidebar.addSidebarWidgetType(CalltreeSidebarWidgetType())
