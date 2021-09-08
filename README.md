@@ -8,9 +8,9 @@ Generates call tree
 
 ## TODO:
 - [ ] Ability to expand selected function
-- [ ] Ability to expand all functions
+- [x] Ability to expand all functions
 - [ ] Setting and viewing depth of function recursion
-- [ ] Move widget to side bar
+- [x] Move widget to side bar
 - [ ] Generating graph on current call tree
 
 ## Minimum Version
