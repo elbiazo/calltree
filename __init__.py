@@ -76,6 +76,7 @@ class HelloSidebarWidget(SidebarWidget):
         self.incall_tree_view.doubleClicked.connect(self.in_goto_func)
         cur_func_layout = QVBoxLayout()
         self.cur_func_label = QLabel("None")
+        self.cur_func_label.setStyleSheet("font-weight: bold;")
         self.expand_all_button = QPushButton("Expand All")
         self.expand_all_button.clicked.connect(self.expand_all)
 
