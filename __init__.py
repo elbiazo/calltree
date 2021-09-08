@@ -1,14 +1,34 @@
-from binaryninjaui import DockHandler, DockContextHandler, UIActionHandler
+from binaryninjaui import (
+    DockHandler,
+    DockContextHandler,
+    UIActionHandler,
+    SidebarWidget,
+    SidebarWidgetType,
+    Sidebar,
+)
 from binaryninja import log_info
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRectF
 from PySide6.QtWidgets import (
     QApplication,
     QTreeView,
     QWidget,
     QLabel,
     QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
 )
-from PySide6.QtGui import QFont, QColor, QStandardItemModel, QStandardItem
+from PySide6.QtGui import (
+    QFont,
+    QColor,
+    QStandardItemModel,
+    QStandardItem,
+    QImage,
+    QPixmap,
+    QPainter,
+)
+
+
+instance_id = 0
 
 
 class BNFuncItem(QStandardItem):
@@ -26,10 +46,14 @@ class BNFuncItem(QStandardItem):
         self.setText(func.name)
 
 
-class CallTreeWidget(QWidget, DockContextHandler):
-    def __init__(self, parent, name):
-        QWidget.__init__(self, parent)
-        DockContextHandler.__init__(self, self, name)
+# Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
+# provides callbacks for sidebar events, and must be created with a title.
+class HelloSidebarWidget(SidebarWidget):
+    def __init__(self, name, frame, data):
+        global instance_id
+        SidebarWidget.__init__(self, name)
+        self.datatype = QLabel("")
+        self.data = data
         self.actionHandler = UIActionHandler()
         self.actionHandler.setupActionHandler(self)
         self.cur_func = None
@@ -52,12 +76,19 @@ class CallTreeWidget(QWidget, DockContextHandler):
         self.incall_tree_view.doubleClicked.connect(self.in_goto_func)
         cur_func_layout = QVBoxLayout()
         self.cur_func_label = QLabel("None")
+        self.expand_all_button = QPushButton("Expand All")
+        self.expand_all_button.clicked.connect(self.expand_all)
 
         cur_func_layout.addWidget(self.cur_func_label)
+        cur_func_layout.addWidget(self.expand_all_button)
         cur_func_layout.addLayout(call_layout)
         call_layout.addWidget(self.outcall_tree_view)
         call_layout.addWidget(self.incall_tree_view)
         self.setLayout(cur_func_layout)
+
+    def expand_all(self):
+        self.incall_tree_view.expandAll()
+        self.outcall_tree_view.expandAll()
 
     def out_goto_func(self, index):
         cur_item_index = self.outcall_tree_view.selectedIndexes()[0]
@@ -141,34 +172,46 @@ class CallTreeWidget(QWidget, DockContextHandler):
                 self.update_incoming_widget(self.cur_func)
                 self.update_outgoing_widget(self.cur_func)
 
-    def shouldBeVisible(self, view_frame):
-        if view_frame is None:
-            return False
-        else:
-            return True
-
     def notifyViewChanged(self, view_frame):
-        if view_frame is not None:
-            self.view_frame = view_frame
-            self.binary_view = self.view_frame.actionContext().binaryView
+        if view_frame is None:
+            self.datatype.setText("None")
+            self.data = None
+        else:
+            self.datatype.setText(view_frame.getCurrentView())
+            view = view_frame.getCurrentViewInterface()
+            self.data = view.getData()
+            self.binary_view = view_frame.actionContext().binaryView
 
     def contextMenuEvent(self, event):
         self.m_contextMenuManager.show(self.m_menu, self.actionHandler)
 
-    @staticmethod
-    def create_widget(name, parent, data=None):
-        return CallTreeWidget(parent, name)
-        # return HelloDockWidget(parent, name)
+
+class HelloSidebarWidgetType(SidebarWidgetType):
+    def __init__(self):
+        # Sidebar icons are 28x28 points. Should be at least 56x56 pixels for
+        # HiDPI display compatibility. They will be automatically made theme
+        # aware, so you need only provide a grayscale image, where white is
+        # the color of the shape.
+        icon = QImage(56, 56, QImage.Format_RGB32)
+        icon.fill(0)
+
+        # Render an "H" as the example icon
+        p = QPainter()
+        p.begin(icon)
+        p.setFont(QFont("Open Sans", 56))
+        p.setPen(QColor(255, 255, 255, 255))
+        p.drawText(QRectF(0, 0, 56, 56), Qt.AlignCenter, "C")
+        p.end()
+
+        SidebarWidgetType.__init__(self, icon, "Hello")
+
+    def createWidget(self, frame, data):
+        # This callback is called when a widget needs to be created for a given context. Different
+        # widgets are created for each unique BinaryView. They are created on demand when the sidebar
+        # widget is visible and the BinaryView becomes active.
+        return HelloSidebarWidget("Calltree", frame, data)
 
 
-def addStaticDockWidget():
-    mw = QApplication.allWidgets()[0].window()
-    dock_handler = mw.findChild(DockHandler, "__DockHandler")
-    dock_widget = CallTreeWidget.create_widget("Call Tree", dock_handler.parent())
-    dock_handler.addDockWidget(
-        dock_widget, Qt.BottomDockWidgetArea, Qt.Horizontal, True
-    )
-
-
-addStaticDockWidget()
-# addDynamicDockWidget()
+# Register the sidebar widget type with Binary Ninja. This will make it appear as an icon in the
+# sidebar and the `createWidget` method will be called when a widget is required.
+Sidebar.addSidebarWidgetType(HelloSidebarWidgetType())
