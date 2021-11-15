@@ -32,18 +32,9 @@ instance_id = 0
 
 
 class BNFuncItem(QStandardItem):
-    def __init__(self, func, font_size=12, set_bold=False, color=QColor(0, 0, 0)):
+    def __init__(self, func_name):
         super().__init__()
-
-        fnt = QFont("Open Sans", font_size)
-        fnt.setBold(set_bold)
-
-        self.func = func
-        self.setEditable(False)
-        # Todo: Add support for binja color
-        # self.setForeground(color)
-        self.setFont(fnt)
-        self.setText(func.name)
+        self.setText(func_name)
 
 
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
@@ -106,7 +97,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         if depth <= self.func_depth:
             if cur_func_callers:
                 for cur_func_caller in cur_func_callers:
-                    new_std_item = BNFuncItem(cur_func_caller, 12)
+                    new_std_item = BNFuncItem(cur_func_caller.name)
                     cur_std_item.appendRow(new_std_item)
                     self.set_func_callers(cur_func_caller, new_std_item, depth + 1)
 
@@ -122,7 +113,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         # Set root std Items
         if cur_func_callers:
             for cur_func_caller in cur_func_callers:
-                root_std_items.append(BNFuncItem(cur_func_caller, 12))
+                root_std_items.append(BNFuncItem(cur_func_caller.name))
                 cur_std_item = root_std_items[-1]
                 self.set_func_callers(cur_func_caller, cur_std_item)
 
@@ -133,7 +124,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         if depth <= self.func_depth:
             if cur_func_callees:
                 for cur_func_callee in cur_func_callees:
-                    new_std_item = BNFuncItem(cur_func_callee, 12)
+                    new_std_item = BNFuncItem(cur_func_callee.name)
                     cur_std_item.appendRow(new_std_item)
                     self.set_func_callees(cur_func_callee, new_std_item, depth + 1)
 
@@ -149,7 +140,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         # Set root std Items
         if cur_func_callees:
             for cur_func_callee in cur_func_callees:
-                root_std_items.append(BNFuncItem(cur_func_callee, 12))
+                root_std_items.append(BNFuncItem(cur_func_callee.name))
                 cur_std_item = root_std_items[-1]
                 self.set_func_callees(cur_func_callee, cur_std_item)
 
