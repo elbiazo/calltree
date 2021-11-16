@@ -27,13 +27,25 @@ from binaryninja.settings import Settings
 instance_id = 0
 Settings().register_group("calltree", "Calltree")
 Settings().register_setting(
-    "calltree.depth",
+    "calltree.in_depth",
     """
     {
-        "title" : "Initial Function Depth",
+        "title" : "Initial Function Incoming Depth",
         "type" : "number",
         "default" : 5,
-        "description" : "Initial Function Depth",
+        "description" : "Initial Function Incoming Depth",
+        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+    }
+    """,
+)
+Settings().register_setting(
+    "calltree.out_depth",
+    """
+    {
+        "title" : "Initial Function Outgoing Depth",
+        "type" : "number",
+        "default" : 5,
+        "description" : "Initial Function Outgoing Depth",
         "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
     }
     """,
@@ -55,9 +67,10 @@ class CalltreeSidebarWidget(SidebarWidget):
         # Create a QHBoxLayout instance
         call_layout = QVBoxLayout()
         # Add widgets to the layout
-        func_depth = Settings().get_integer("calltree.depth")
-        self.in_calltree = CallTreeWidget("Incoming Calls", func_depth)
-        self.out_calltree = CallTreeWidget("Outgoing Calls", func_depth)
+        in_func_depth = Settings().get_integer("calltree.in_depth")
+        out_func_depth = Settings().get_integer("calltree.out_depth")
+        self.in_calltree = CallTreeWidget("Incoming Calls", in_func_depth)
+        self.out_calltree = CallTreeWidget("Outgoing Calls", out_func_depth)
 
         cur_func_layout = QVBoxLayout()
 
