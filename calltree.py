@@ -70,11 +70,15 @@ class CallTreeWidget:
         if depth < self._func_depth:
             if cur_func_calls:
                 for cur_func_call in cur_func_calls:
-                    new_std_item = BNFuncItem(cur_func_call)
-                    cur_std_item.appendRow(new_std_item)
-                    self.set_func_calls(
-                        cur_func_call, new_std_item, is_caller, depth + 1
-                    )
+                    if depth == 0 and cur_func == cur_func_call:
+                        # Skipping function that calls itself
+                        continue
+                    else:
+                        new_std_item = BNFuncItem(cur_func_call)
+                        cur_std_item.appendRow(new_std_item)
+                        self.set_func_calls(
+                            cur_func_call, new_std_item, is_caller, depth + 1
+                        )
 
     def update_widget(self, cur_func, is_caller):
         # Clear previous calls
