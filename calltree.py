@@ -44,6 +44,7 @@ class CallTreeWidget:
     def onTextChanged(self, text):
         self.proxy_model.setRecursiveFilteringEnabled(True)
         self.proxy_model.setFilterRegularExpression(text)
+        self.expand_all()
 
     @property
     def binary_view(self):
@@ -66,6 +67,9 @@ class CallTreeWidget:
 
     def expand_all(self):
         self.treeview.expandAll()
+
+    def collapse_all(self):
+        self.treeview.collapseAll()
 
     def goto_func(self, index):
         cur_func = self.model.itemFromIndex(self.proxy_model.mapToSource(index)).func
@@ -106,10 +110,12 @@ class CallTreeWidget:
                 self.set_func_calls(cur_func_call, cur_std_item, is_caller)
 
         call_root_node.appendRows(root_std_items)
+        self.expand_all()
 
     def clear(self):
         self.model.clear()
         self.set_label(self.label_name)
+        self.expand_all()
 
     def set_label(self, label_name):
         self.model.setHorizontalHeaderLabels([label_name])

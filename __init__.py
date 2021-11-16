@@ -8,7 +8,7 @@ from binaryninjaui import (
 )
 from binaryninja import log_info
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QSize, QRect
 from PySide6.QtWidgets import (
     QApplication,
     QTreeView,
@@ -28,6 +28,7 @@ from PySide6.QtGui import (
     QImage,
     QPixmap,
     QPainter,
+    QIcon,
 )
 
 from .calltree import CallTreeWidget
@@ -79,6 +80,11 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.out_expand_all_button = QPushButton("Expand")
         self.out_expand_all_button.clicked.connect(self.out_calltree.expand_all)
 
+        self.in_collapse_all_button = QPushButton("Collapse")
+        self.in_collapse_all_button.clicked.connect(self.in_calltree.collapse_all)
+        self.out_collapse_all_button = QPushButton("Collapse")
+        self.out_collapse_all_button.clicked.connect(self.out_calltree.collapse_all)
+
         self.in_func_filter = QLineEdit()
         self.out_func_filter = QLineEdit()
         self.in_func_filter.textChanged.connect(self.in_calltree.onTextChanged)
@@ -94,9 +100,11 @@ class CalltreeSidebarWidget(SidebarWidget):
 
         in_util_layout.addWidget(self.in_func_filter)
         in_util_layout.addWidget(self.in_expand_all_button)
+        in_util_layout.addWidget(self.in_collapse_all_button)
         in_util_layout.addWidget(self.in_spinbox)
         out_util_layout.addWidget(self.out_func_filter)
         out_util_layout.addWidget(self.out_expand_all_button)
+        out_util_layout.addWidget(self.out_collapse_all_button)
         out_util_layout.addWidget(self.out_spinbox)
         self.in_spinbox.setValue(self.in_calltree.func_depth)
         self.out_spinbox.setValue(self.out_calltree.func_depth)
