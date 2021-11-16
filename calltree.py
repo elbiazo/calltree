@@ -36,7 +36,7 @@ class CallTreeWidget:
 
         self.treeview.setModel(self.proxy_model)
         self.treeview.doubleClicked.connect(self.goto_func)
-        self.func_depth = 10
+        self._func_depth = 1
         self._binary_view = None
         self.label_name = label_name
         self.set_label(self.label_name)
@@ -51,6 +51,14 @@ class CallTreeWidget:
     @binary_view.setter
     def binary_view(self, bv):
         self._binary_view = bv
+
+    @property
+    def func_depth(self):
+        return self._func_depth
+    
+    @func_depth.setter
+    def func_depth(self, depth):
+        self._func_depth = depth
 
     def get_treeview(self):
         return self.treeview
@@ -68,7 +76,7 @@ class CallTreeWidget:
         else:
             cur_func_calls = list(set(cur_func.callees))
 
-        if depth < self.func_depth:
+        if depth < self._func_depth:
             if cur_func_calls:
                 for cur_func_call in cur_func_calls:
                     new_std_item = BNFuncItem(cur_func_call, depth)

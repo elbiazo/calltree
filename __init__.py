@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QLineEdit,
+    QSpinBox,
 )
 from PySide6.QtGui import (
     QFont,
@@ -72,10 +73,20 @@ class CalltreeSidebarWidget(SidebarWidget):
 
         in_util_layout = QHBoxLayout()
         out_util_layout = QHBoxLayout()
+        
+        self.in_spinbox = QSpinBox()
+        self.out_spinbox = QSpinBox()
+        self.in_spinbox.valueChanged.connect(self.in_spinbox_changed)
+        self.out_spinbox.valueChanged.connect(self.out_spinbox_changed)
+
         in_util_layout.addWidget(self.in_func_filter)
         in_util_layout.addWidget(self.in_expand_all_button)
+        in_util_layout.addWidget(self.in_spinbox)
         out_util_layout.addWidget(self.out_func_filter)
         out_util_layout.addWidget(self.out_expand_all_button)
+        out_util_layout.addWidget(self.out_spinbox)
+        self.in_spinbox.setValue(self.in_calltree.func_depth)
+        self.out_spinbox.setValue(self.out_calltree.func_depth)
 
         cur_func_layout.addWidget(self.cur_func_label)
         cur_func_layout.addLayout(call_layout)
@@ -85,7 +96,14 @@ class CalltreeSidebarWidget(SidebarWidget):
         call_layout.addWidget(self.out_calltree.get_treeview())
         call_layout.addLayout(out_util_layout)
 
+
         self.setLayout(cur_func_layout)
+
+    def in_spinbox_changed(self):
+        self.in_calltree.func_depth = self.in_spinbox.value()
+
+    def out_spinbox_changed(self):
+        self.out_calltree.func_depth = self.out_spinbox.value()
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
