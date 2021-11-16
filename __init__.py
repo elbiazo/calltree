@@ -7,6 +7,7 @@ from binaryninjaui import (
     Sidebar,
 )
 from binaryninja import log_info
+
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtWidgets import (
     QApplication,
@@ -30,6 +31,7 @@ from PySide6.QtGui import (
 from .calltree import CallTreeWidget
 
 instance_id = 0
+
 
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
 # provides callbacks for sidebar events, and must be created with a title.
@@ -55,20 +57,21 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.cur_func_label = QLabel("None")
         self.cur_func_label.setStyleSheet("font-weight: bold;")
 
-        self.expand_all_button = QPushButton("Expand All")
-        self.expand_all_button.clicked.connect(self.expand_all)
+        self.in_expand_all_button = QPushButton("Expand")
+        self.in_expand_all_button.clicked.connect(self.in_calltree.expand_all)
+
+        self.out_expand_all_button = QPushButton("Expand")
+        self.out_expand_all_button.clicked.connect(self.out_calltree.expand_all)
 
         cur_func_layout.addWidget(self.cur_func_label)
-        cur_func_layout.addWidget(self.expand_all_button)
         cur_func_layout.addLayout(call_layout)
 
         call_layout.addWidget(self.in_calltree.get_calltree_view())
+        call_layout.addWidget(self.in_expand_all_button)
         call_layout.addWidget(self.out_calltree.get_calltree_view())
-        self.setLayout(cur_func_layout)
+        call_layout.addWidget(self.out_expand_all_button)
 
-    def expand_all(self):
-        self.in_calltree.expand_all()
-        self.out_calltree.expand_all()
+        self.setLayout(cur_func_layout)
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
