@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QSortFilterProxyModel
 from PySide6.QtWidgets import (
     QApplication,
     QTreeView,
@@ -19,7 +19,6 @@ from PySide6.QtGui import (
     QIcon,
 )
 
-
 class BNFuncItem(QStandardItem):
     def __init__(self, func, depth_num=0):
         super().__init__()
@@ -28,14 +27,20 @@ class BNFuncItem(QStandardItem):
 
 class CallTreeWidget:
     def __init__(self, label_name):
-        self.calltree_view = QTreeView()
-        self.calltree_model = QStandardItemModel()
-        self.calltree_view.setModel(self.calltree_model)
-        self.calltree_view.doubleClicked.connect(self.goto_func)
+        self.treeview = QTreeView()
+        self.model = QStandardItemModel()
+        self.proxy_model = QSortFilterProxyModel(self.treeview)
+        self.proxy_model.setSourceModel(self.model)
+
+        self.treeview.setModel(self.proxy_model)
+        self.treeview.doubleClicked.connect(self.goto_func)
         self.func_depth = 1
         self._binary_view = None
         self.label_name = label_name
         self.set_label(self.label_name)
+
+    def onTextChanged(self, text):
+        self.proxy_model.setFilterRegularExpression(text)
 
     @property
     def binary_view(self):
@@ -45,14 +50,14 @@ class CallTreeWidget:
     def binary_view(self, bv):
         self._binary_view = bv
 
-    def get_calltree_view(self):
-        return self.calltree_view
+    def get_treeview(self):
+        return self.treeview
 
     def expand_all(self):
-        self.calltree_view.expandAll()
+        self.treeview.expandAll()
 
     def goto_func(self, index):
-        cur_item_index = self.calltree_view.selectedIndexes()[0]
+        cur_item_index = self.treeview.selectedIndexes()[0]
         cur_func = cur_item_index.model().itemFromIndex(index).func
         self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
@@ -74,7 +79,7 @@ class CallTreeWidget:
     def update_widget(self, cur_func, is_caller):
         # Clear previous calls
         self.clear()
-        call_root_node = self.calltree_model.invisibleRootItem()
+        call_root_node = self.model.invisibleRootItem()
 
         if is_caller:
             cur_func_calls = list(set(cur_func.callers))
@@ -93,8 +98,8 @@ class CallTreeWidget:
         call_root_node.appendRows(root_std_items)
 
     def clear(self):
-        self.calltree_model.clear()
+        self.model.clear()
         self.set_label(self.label_name)
 
     def set_label(self, label_name):
-        self.calltree_model.setHorizontalHeaderLabels([label_name])
+        self.model.setHorizontalHeaderLabels([label_name])

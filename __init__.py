@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QPushButton,
+    QLineEdit,
 )
 from PySide6.QtGui import (
     QFont,
@@ -54,22 +55,36 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.out_calltree = CallTreeWidget("Outgoing Calls")
 
         cur_func_layout = QVBoxLayout()
+
         self.cur_func_label = QLabel("None")
         self.cur_func_label.setStyleSheet("font-weight: bold;")
 
+        # Call function utilities
         self.in_expand_all_button = QPushButton("Expand")
         self.in_expand_all_button.clicked.connect(self.in_calltree.expand_all)
-
         self.out_expand_all_button = QPushButton("Expand")
         self.out_expand_all_button.clicked.connect(self.out_calltree.expand_all)
+
+        self.in_func_filter = QLineEdit()
+        self.out_func_filter = QLineEdit()
+        self.in_func_filter.textChanged.connect(self.in_calltree.onTextChanged)
+        self.out_func_filter.textChanged.connect(self.out_calltree.onTextChanged)
+
+        in_util_layout = QHBoxLayout()
+        out_util_layout = QHBoxLayout()
+        in_util_layout.addWidget(self.in_func_filter)
+        in_util_layout.addWidget(self.in_expand_all_button)
+        out_util_layout.addWidget(self.out_func_filter)
+        out_util_layout.addWidget(self.out_expand_all_button)
 
         cur_func_layout.addWidget(self.cur_func_label)
         cur_func_layout.addLayout(call_layout)
 
-        call_layout.addWidget(self.in_calltree.get_calltree_view())
-        call_layout.addWidget(self.in_expand_all_button)
-        call_layout.addWidget(self.out_calltree.get_calltree_view())
-        call_layout.addWidget(self.out_expand_all_button)
+        call_layout.addWidget(self.in_calltree.get_treeview())
+        call_layout.addLayout(in_util_layout)
+        call_layout.addWidget(self.out_calltree.get_treeview())
+        call_layout.addLayout(out_util_layout)
+
 
         self.setLayout(cur_func_layout)
 
