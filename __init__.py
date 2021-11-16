@@ -31,10 +31,22 @@ from PySide6.QtGui import (
 )
 
 from .calltree import CallTreeWidget
+from binaryninja.settings import Settings
 
 instance_id = 0
-
-
+Settings().register_group("calltree", "Calltree")
+Settings().register_setting(
+    "calltree.depth",
+    """
+    {
+        "title" : "Initial Function Depth",
+        "type" : "number",
+        "default" : 5,
+        "description" : "Initial Function Depth",
+        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+    }
+    """,
+)
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
 # provides callbacks for sidebar events, and must be created with a title.
 class CalltreeSidebarWidget(SidebarWidget):
@@ -52,8 +64,9 @@ class CalltreeSidebarWidget(SidebarWidget):
         # Create a QHBoxLayout instance
         call_layout = QVBoxLayout()
         # Add widgets to the layout
-        self.in_calltree = CallTreeWidget("Incoming Calls")
-        self.out_calltree = CallTreeWidget("Outgoing Calls")
+        func_depth = Settings().get_integer("calltree.depth")
+        self.in_calltree = CallTreeWidget("Incoming Calls", func_depth)
+        self.out_calltree = CallTreeWidget("Outgoing Calls", func_depth)
 
         cur_func_layout = QVBoxLayout()
 
@@ -73,7 +86,7 @@ class CalltreeSidebarWidget(SidebarWidget):
 
         in_util_layout = QHBoxLayout()
         out_util_layout = QHBoxLayout()
-        
+
         self.in_spinbox = QSpinBox()
         self.out_spinbox = QSpinBox()
         self.in_spinbox.valueChanged.connect(self.in_spinbox_changed)
@@ -96,14 +109,17 @@ class CalltreeSidebarWidget(SidebarWidget):
         call_layout.addWidget(self.out_calltree.get_treeview())
         call_layout.addLayout(out_util_layout)
 
-
         self.setLayout(cur_func_layout)
 
     def in_spinbox_changed(self):
         self.in_calltree.func_depth = self.in_spinbox.value()
+        if self.cur_func is not None:
+            self.in_calltree.update_widget(self.cur_func, True)
 
     def out_spinbox_changed(self):
         self.out_calltree.func_depth = self.out_spinbox.value()
+        if self.cur_func is not None:
+            self.out_calltree.update_widget(self.cur_func, False)
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)

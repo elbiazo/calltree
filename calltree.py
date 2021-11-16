@@ -21,14 +21,14 @@ from PySide6.QtGui import (
 
 
 class BNFuncItem(QStandardItem):
-    def __init__(self, func, depth_num=0):
+    def __init__(self, func):
         super().__init__()
         self.func = func
         self.setText(func.name)
 
 
 class CallTreeWidget:
-    def __init__(self, label_name):
+    def __init__(self, label_name, depth):
         self.treeview = QTreeView()
         self.model = QStandardItemModel()
         self.proxy_model = QSortFilterProxyModel(self.treeview)
@@ -36,7 +36,7 @@ class CallTreeWidget:
 
         self.treeview.setModel(self.proxy_model)
         self.treeview.doubleClicked.connect(self.goto_func)
-        self._func_depth = 1
+        self._func_depth = depth
         self._binary_view = None
         self.label_name = label_name
         self.set_label(self.label_name)
@@ -55,7 +55,7 @@ class CallTreeWidget:
     @property
     def func_depth(self):
         return self._func_depth
-    
+
     @func_depth.setter
     def func_depth(self, depth):
         self._func_depth = depth
