@@ -1,23 +1,9 @@
-from PySide6.QtCore import Qt, QRectF, QSortFilterProxyModel
-from PySide6.QtWidgets import (
-    QApplication,
-    QTreeView,
-    QWidget,
-    QLabel,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-)
+from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
-    QFont,
-    QColor,
     QStandardItemModel,
     QStandardItem,
-    QImage,
-    QPixmap,
-    QPainter,
-    QIcon,
 )
+from PySide6.QtWidgets import QTreeView
 
 
 class BNFuncItem(QStandardItem):

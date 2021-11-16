@@ -1,18 +1,12 @@
 from binaryninjaui import (
-    DockHandler,
-    DockContextHandler,
     UIActionHandler,
     SidebarWidget,
     SidebarWidgetType,
     Sidebar,
 )
-from binaryninja import log_info
 
-from PySide6.QtCore import Qt, QRectF, QSize, QRect
+from PySide6.QtCore import Qt, QRectF, QSize
 from PySide6.QtWidgets import (
-    QApplication,
-    QTreeView,
-    QWidget,
     QLabel,
     QVBoxLayout,
     QHBoxLayout,
@@ -23,12 +17,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import (
     QFont,
     QColor,
-    QStandardItemModel,
-    QStandardItem,
     QImage,
-    QPixmap,
     QPainter,
-    QIcon,
 )
 
 from .calltree import CallTreeWidget
@@ -75,14 +65,19 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.cur_func_label.setStyleSheet("font-weight: bold;")
 
         # Call function utilities
-        self.in_expand_all_button = QPushButton("Expand")
+        btn_size = QSize(25, 25)
+        self.in_expand_all_button = QPushButton("E")
+        self.in_expand_all_button.setFixedSize(btn_size)
         self.in_expand_all_button.clicked.connect(self.in_calltree.expand_all)
-        self.out_expand_all_button = QPushButton("Expand")
+        self.out_expand_all_button = QPushButton("E")
+        self.out_expand_all_button.setFixedSize(btn_size)
         self.out_expand_all_button.clicked.connect(self.out_calltree.expand_all)
 
-        self.in_collapse_all_button = QPushButton("Collapse")
+        self.in_collapse_all_button = QPushButton("C")
+        self.in_collapse_all_button.setFixedSize(btn_size)
         self.in_collapse_all_button.clicked.connect(self.in_calltree.collapse_all)
-        self.out_collapse_all_button = QPushButton("Collapse")
+        self.out_collapse_all_button = QPushButton("C")
+        self.out_collapse_all_button.setFixedSize(btn_size)
         self.out_collapse_all_button.clicked.connect(self.out_calltree.collapse_all)
 
         self.in_func_filter = QLineEdit()
