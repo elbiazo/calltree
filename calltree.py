@@ -79,7 +79,7 @@ class CallTreeWidget:
         if depth < self._func_depth:
             if cur_func_calls:
                 for cur_func_call in cur_func_calls:
-                    new_std_item = BNFuncItem(cur_func_call, depth)
+                    new_std_item = BNFuncItem(cur_func_call)
                     cur_std_item.appendRow(new_std_item)
                     self.set_func_calls(
                         cur_func_call, new_std_item, is_caller, depth + 1
