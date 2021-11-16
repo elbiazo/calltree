@@ -2,6 +2,8 @@
     "pluginmetadataversion": 2,
     "name": "Call Tree",
     "type": [
+        "callgraph",
+        "calltree",
         "ui",
         "binaryview",
         "helper"
@@ -32,7 +34,7 @@
         "other": [
         ]
     },
-    "version": "0.0",
+    "version": "0.0.0",
     "author": "Eric Biazo",
-    "minimumbinaryninjaversion": 1200
+    "minimumbinaryninjaversion": 2966
 }
