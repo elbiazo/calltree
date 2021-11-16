@@ -85,7 +85,6 @@ class CalltreeSidebarWidget(SidebarWidget):
         call_layout.addWidget(self.out_calltree.get_treeview())
         call_layout.addLayout(out_util_layout)
 
-
         self.setLayout(cur_func_layout)
 
     def notifyOffsetChanged(self, offset):
