@@ -42,6 +42,7 @@ class CallTreeWidget:
         self.set_label(self.label_name)
 
     def onTextChanged(self, text):
+        self.proxy_model.setRecursiveFilteringEnabled(True)
         self.proxy_model.setFilterRegularExpression(text)
 
     @property
