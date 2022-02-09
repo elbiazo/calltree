@@ -31,7 +31,7 @@ When working with really big binaries with alot of xrefs, you would want to chan
 
 ### Expand and Collapse tree
 
-**Expanded**
+**Expand**
 
 ![](images/2022-02-09-16-50-03.png)
 
