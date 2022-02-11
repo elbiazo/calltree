@@ -3,7 +3,7 @@ from PySide6.QtGui import (
     QStandardItemModel,
     QStandardItem,
 )
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QTreeView
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QSpinBox,
+    QTextEdit,
 )
 
 
@@ -19,6 +20,17 @@ class BNFuncItem(QStandardItem):
         super().__init__()
         self.func = func
         self.setText(func.name)
+
+
+class CurrentFunctionLayout(QHBoxLayout):
+    def __init__(self):
+        super().__init__()
+        self.cur_func_text = QTextEdit()
+        self.cur_func_text.setReadOnly(True)
+        self.cur_func_text.setMaximumHeight(40)
+        self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
+        super().addWidget(self.cur_func_text)
 
 
 # Layout with search bar and expand/collapse buttons

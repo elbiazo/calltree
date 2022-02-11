@@ -5,14 +5,11 @@ from binaryninjaui import (
     SidebarWidgetType,
     Sidebar,
 )
-
-from PySide6.QtWidgets import (
-    QLabel,
-    QVBoxLayout,
-)
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QScrollArea, QWidget
 from PySide6.QtGui import QImage
 
-from .calltree import CallTreeLayout
+from .calltree import CallTreeLayout, CurrentFunctionLayout
 from binaryninja.settings import Settings
 
 instance_id = 0
@@ -41,6 +38,49 @@ Settings().register_setting(
     }
     """,
 )
+
+
+class ScrollLabel(QScrollArea):
+
+    # constructor
+    def __init__(self, *args, **kwargs):
+        QScrollArea.__init__(self, *args, **kwargs)
+
+        # making widget resizable
+        self.setWidgetResizable(True)
+
+        # making qwidget object
+        content = QWidget(self)
+        self.setWidget(content)
+
+        # vertical box layout
+        lay = QVBoxLayout(content)
+
+        # creating label
+        self.label = QLabel(content)
+        self.label.setStyleSheet("font-weight: bold;")
+
+        # setting alignment to the text
+        self.label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        # adding label to the layout
+        lay.addWidget(self.label)
+
+    # the setText method
+    def setText(self, text):
+        # setting text to the label
+        self.label.setText(text)
+
+    # getting text method
+    def text(self):
+
+        # getting text of the label
+        get_text = self.label.text()
+
+        # return the text
+        return get_text
+
+
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
 # provides callbacks for sidebar events, and must be created with a title.
 class CalltreeSidebarWidget(SidebarWidget):
@@ -55,7 +95,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.binary_view = None
 
         # Create a QHBoxLayout instance
-        call_layout = QVBoxLayout()
+        calltree_layout = QVBoxLayout()
         # Add widgets to the layout
         in_func_depth = Settings().get_integer("calltree.in_depth")
         out_func_depth = Settings().get_integer("calltree.out_depth")
@@ -63,32 +103,29 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
         self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
 
-        cur_func_layout = QVBoxLayout()
+        cur_func_layout = CurrentFunctionLayout()
 
-        self.cur_func_label = QLabel("None")
-        self.cur_func_label.setStyleSheet("font-weight: bold;")
+        self.cur_func_text = cur_func_layout.cur_func_text
 
-        cur_func_layout.addWidget(self.cur_func_label)
-        cur_func_layout.addLayout(call_layout)
+        calltree_layout.addLayout(cur_func_layout)
+        calltree_layout.addLayout(self.in_calltree)
+        calltree_layout.addLayout(self.out_calltree)
 
-        call_layout.addLayout(self.in_calltree)
-        call_layout.addLayout(self.out_calltree)
-
-        self.setLayout(cur_func_layout)
+        self.setLayout(calltree_layout)
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
 
         if not cur_funcs:
             self.prev_func_offset = None
-            self.cur_func_label.setText("None")
+            self.cur_func_text.setText("None")
             self.in_calltree.clear()
             self.out_calltree.clear()
         else:
             if cur_funcs[0].start != self.prev_func_offset:
                 self.prev_func_offset = cur_funcs[0].start
                 cur_func = cur_funcs[0]
-                self.cur_func_label.setText(cur_func.name)
+                self.cur_func_text.setText(cur_func.name)
                 self.in_calltree.cur_func = cur_func
                 self.out_calltree.cur_func = cur_func
                 self.in_calltree.update_widget(cur_func)
