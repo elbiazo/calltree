@@ -54,14 +54,14 @@ class CallTreeUtilLayout(QHBoxLayout):
 
 
 class CallTreeLayout(QVBoxLayout):
-    def __init__(self, label_name, depth, is_caller: bool):
+    def __init__(self, label_name: str, depth: int, is_caller: bool):
         super().__init__()
-        self.cur_func = None
-        self.is_caller = is_caller
+        self._cur_func = None
+        self._is_caller = is_caller
         # Creates treeview for all the function calls
-        self.treeview = QTreeView()
-        self.model = QStandardItemModel()
-        self.proxy_model = QSortFilterProxyModel(self.treeview)
+        self._treeview = QTreeView()
+        self._model = QStandardItemModel()
+        self._proxy_model = QSortFilterProxyModel(self.treeview)
         self.proxy_model.setSourceModel(self.model)
 
         self.treeview.setModel(self.proxy_model)
@@ -70,7 +70,7 @@ class CallTreeLayout(QVBoxLayout):
         self.treeview.doubleClicked.connect(self.goto_func)
         self._func_depth = depth
         self._binary_view = None
-        self.label_name = label_name
+        self._label_name = label_name
         self.set_label(self.label_name)
         super().addWidget(self.treeview)
         self.util = CallTreeUtilLayout(self)
@@ -80,6 +80,38 @@ class CallTreeLayout(QVBoxLayout):
         self.proxy_model.setRecursiveFilteringEnabled(True)
         self.proxy_model.setFilterRegularExpression(text)
         self.expand_all()
+
+    @property
+    def proxy_model(self):
+        return self._proxy_model
+
+    @property
+    def label_name(self):
+        return self._label_name
+
+    @property
+    def cur_func(self):
+        return self._cur_func
+
+    @cur_func.setter
+    def cur_func(self, cur_func):
+        self._cur_func = cur_func
+
+    @property
+    def is_caller(self):
+        return self._is_caller
+
+    @property
+    def treeview(self):
+        return self._treeview
+
+    @property
+    def func_depth(self):
+        return self._func_depth
+
+    @property
+    def model(self):
+        return self._model
 
     @property
     def binary_view(self):

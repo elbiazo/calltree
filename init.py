@@ -44,7 +44,7 @@ Settings().register_setting(
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
 # provides callbacks for sidebar events, and must be created with a title.
 class CalltreeSidebarWidget(SidebarWidget):
-    def __init__(self, name, frame, data):
+    def __init__(self, name: str, frame, data):
         global instance_id
         SidebarWidget.__init__(self, name)
         self.datatype = QLabel("")
