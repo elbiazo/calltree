@@ -1,27 +1,15 @@
+from pathlib import Path
 from binaryninjaui import (
     UIActionHandler,
     SidebarWidget,
     SidebarWidgetType,
     Sidebar,
 )
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QScrollArea, QWidget
+from PySide6.QtGui import QImage
 
-from PySide6.QtCore import Qt, QRectF, QSize
-from PySide6.QtWidgets import (
-    QLabel,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLineEdit,
-    QSpinBox,
-)
-from PySide6.QtGui import (
-    QFont,
-    QColor,
-    QImage,
-    QPainter,
-)
-
-from .calltree import CallTreeWidget
+from .calltree import CallTreeLayout, CurrentFunctionLayout
 from binaryninja.settings import Settings
 
 instance_id = 0
@@ -50,108 +38,98 @@ Settings().register_setting(
     }
     """,
 )
+
+
+class ScrollLabel(QScrollArea):
+
+    # constructor
+    def __init__(self, *args, **kwargs):
+        QScrollArea.__init__(self, *args, **kwargs)
+
+        # making widget resizable
+        self.setWidgetResizable(True)
+
+        # making qwidget object
+        content = QWidget(self)
+        self.setWidget(content)
+
+        # vertical box layout
+        lay = QVBoxLayout(content)
+
+        # creating label
+        self.label = QLabel(content)
+        self.label.setStyleSheet("font-weight: bold;")
+
+        # setting alignment to the text
+        self.label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        # adding label to the layout
+        lay.addWidget(self.label)
+
+    # the setText method
+    def setText(self, text):
+        # setting text to the label
+        self.label.setText(text)
+
+    # getting text method
+    def text(self):
+
+        # getting text of the label
+        get_text = self.label.text()
+
+        # return the text
+        return get_text
+
+
 # Sidebar widgets must derive from SidebarWidget, not QWidget. SidebarWidget is a QWidget but
 # provides callbacks for sidebar events, and must be created with a title.
 class CalltreeSidebarWidget(SidebarWidget):
-    def __init__(self, name, frame, data):
+    def __init__(self, name: str, frame, data):
         global instance_id
         SidebarWidget.__init__(self, name)
         self.datatype = QLabel("")
         self.data = data
         self.actionHandler = UIActionHandler()
         self.actionHandler.setupActionHandler(self)
-        self.cur_func = None
         self.prev_func_offset = None
         self.binary_view = None
 
         # Create a QHBoxLayout instance
-        call_layout = QVBoxLayout()
+        calltree_layout = QVBoxLayout()
         # Add widgets to the layout
         in_func_depth = Settings().get_integer("calltree.in_depth")
         out_func_depth = Settings().get_integer("calltree.out_depth")
-        self.in_calltree = CallTreeWidget("Incoming Calls", in_func_depth)
-        self.out_calltree = CallTreeWidget("Outgoing Calls", out_func_depth)
 
-        cur_func_layout = QVBoxLayout()
+        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
+        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
 
-        self.cur_func_label = QLabel("None")
-        self.cur_func_label.setStyleSheet("font-weight: bold;")
+        cur_func_layout = CurrentFunctionLayout()
 
-        # Call function utilities
-        btn_size = QSize(25, 25)
-        self.in_expand_all_button = QPushButton("E")
-        self.in_expand_all_button.setFixedSize(btn_size)
-        self.in_expand_all_button.clicked.connect(self.in_calltree.expand_all)
-        self.out_expand_all_button = QPushButton("E")
-        self.out_expand_all_button.setFixedSize(btn_size)
-        self.out_expand_all_button.clicked.connect(self.out_calltree.expand_all)
+        self.cur_func_text = cur_func_layout.cur_func_text
 
-        self.in_collapse_all_button = QPushButton("C")
-        self.in_collapse_all_button.setFixedSize(btn_size)
-        self.in_collapse_all_button.clicked.connect(self.in_calltree.collapse_all)
-        self.out_collapse_all_button = QPushButton("C")
-        self.out_collapse_all_button.setFixedSize(btn_size)
-        self.out_collapse_all_button.clicked.connect(self.out_calltree.collapse_all)
+        calltree_layout.addLayout(cur_func_layout)
+        calltree_layout.addLayout(self.in_calltree)
+        calltree_layout.addLayout(self.out_calltree)
 
-        self.in_func_filter = QLineEdit()
-        self.out_func_filter = QLineEdit()
-        self.in_func_filter.textChanged.connect(self.in_calltree.onTextChanged)
-        self.out_func_filter.textChanged.connect(self.out_calltree.onTextChanged)
-
-        in_util_layout = QHBoxLayout()
-        out_util_layout = QHBoxLayout()
-
-        self.in_spinbox = QSpinBox()
-        self.out_spinbox = QSpinBox()
-        self.in_spinbox.valueChanged.connect(self.in_spinbox_changed)
-        self.out_spinbox.valueChanged.connect(self.out_spinbox_changed)
-
-        in_util_layout.addWidget(self.in_func_filter)
-        in_util_layout.addWidget(self.in_expand_all_button)
-        in_util_layout.addWidget(self.in_collapse_all_button)
-        in_util_layout.addWidget(self.in_spinbox)
-        out_util_layout.addWidget(self.out_func_filter)
-        out_util_layout.addWidget(self.out_expand_all_button)
-        out_util_layout.addWidget(self.out_collapse_all_button)
-        out_util_layout.addWidget(self.out_spinbox)
-        self.in_spinbox.setValue(self.in_calltree.func_depth)
-        self.out_spinbox.setValue(self.out_calltree.func_depth)
-
-        cur_func_layout.addWidget(self.cur_func_label)
-        cur_func_layout.addLayout(call_layout)
-
-        call_layout.addWidget(self.in_calltree.get_treeview())
-        call_layout.addLayout(in_util_layout)
-        call_layout.addWidget(self.out_calltree.get_treeview())
-        call_layout.addLayout(out_util_layout)
-
-        self.setLayout(cur_func_layout)
-
-    def in_spinbox_changed(self):
-        self.in_calltree.func_depth = self.in_spinbox.value()
-        if self.cur_func is not None:
-            self.in_calltree.update_widget(self.cur_func, True)
-
-    def out_spinbox_changed(self):
-        self.out_calltree.func_depth = self.out_spinbox.value()
-        if self.cur_func is not None:
-            self.out_calltree.update_widget(self.cur_func, False)
+        self.setLayout(calltree_layout)
 
     def notifyOffsetChanged(self, offset):
         cur_funcs = self.binary_view.get_functions_containing(offset)
 
         if not cur_funcs:
             self.prev_func_offset = None
-            self.cur_func_label.setText("None")
+            self.cur_func_text.setText("None")
             self.in_calltree.clear()
             self.out_calltree.clear()
         else:
             if cur_funcs[0].start != self.prev_func_offset:
                 self.prev_func_offset = cur_funcs[0].start
-                self.cur_func = cur_funcs[0]
-                self.cur_func_label.setText(self.cur_func.name)
-                self.in_calltree.update_widget(self.cur_func, True)
-                self.out_calltree.update_widget(self.cur_func, False)
+                cur_func = cur_funcs[0]
+                self.cur_func_text.setText(cur_func.name)
+                self.in_calltree.cur_func = cur_func
+                self.out_calltree.cur_func = cur_func
+                self.in_calltree.update_widget(cur_func)
+                self.out_calltree.update_widget(cur_func)
 
     def notifyViewChanged(self, view_frame):
         if view_frame is None:
@@ -171,20 +149,10 @@ class CalltreeSidebarWidget(SidebarWidget):
 
 class CalltreeSidebarWidgetType(SidebarWidgetType):
     def __init__(self):
-        # Sidebar icons are 28x28 points. Should be at least 56x56 pixels for
-        # HiDPI display compatibility. They will be automatically made theme
-        # aware, so you need only provide a grayscale image, where white is
-        # the color of the shape.
-        icon = QImage(56, 56, QImage.Format_RGB32)
-        icon.fill(0)
 
-        # Render an "C" as the example icon
-        p = QPainter()
-        p.begin(icon)
-        p.setFont(QFont("Open Sans", 56))
-        p.setPen(QColor(255, 255, 255, 255))
-        p.drawText(QRectF(0, 0, 56, 56), Qt.AlignCenter, "C")
-        p.end()
+        root = Path(__file__).parent
+        # Tree icons created by Ardiansyah - Flaticon
+        icon = QImage(str(root.joinpath("icon.png")))
 
         SidebarWidgetType.__init__(self, icon, "Calltree")
 
