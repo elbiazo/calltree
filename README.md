@@ -10,7 +10,8 @@ Generates call tree
 
 ## Releases
 
-* v0.0 -- Beta release
+* 1.0 -- Public Release
+* 0.0 -- Beta Release
 
 ## Minimum Version
 
@@ -52,13 +53,3 @@ When working with really big binaries with alot of xrefs, you would want to chan
 **Default Recursion Depth in Setting**
 
 ![](images/2022-02-09-16-59-03.png)
-
-## Future Work:
-
-- [ ] Ability to expand selected function
-- [x] Ability to expand all functions
-- [x] Setting and viewing depth of function recursion
-- [x] Move widget to side bar
-- [ ] Generating graph on current call tree
-- [ ] Refactor Code
-- [x] Documentation
