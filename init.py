@@ -1,3 +1,4 @@
+from pathlib import Path
 from binaryninjaui import (
     UIActionHandler,
     SidebarWidget,
@@ -171,20 +172,10 @@ class CalltreeSidebarWidget(SidebarWidget):
 
 class CalltreeSidebarWidgetType(SidebarWidgetType):
     def __init__(self):
-        # Sidebar icons are 28x28 points. Should be at least 56x56 pixels for
-        # HiDPI display compatibility. They will be automatically made theme
-        # aware, so you need only provide a grayscale image, where white is
-        # the color of the shape.
-        icon = QImage(56, 56, QImage.Format_RGB32)
-        icon.fill(0)
 
-        # Render an "C" as the example icon
-        p = QPainter()
-        p.begin(icon)
-        p.setFont(QFont("Open Sans", 56))
-        p.setPen(QColor(255, 255, 255, 255))
-        p.drawText(QRectF(0, 0, 56, 56), Qt.AlignCenter, "C")
-        p.end()
+        root = Path(__file__).parent
+        # Tree icons created by Ardiansyah - Flaticon
+        icon = QImage(str(root.joinpath("icon.png")))
 
         SidebarWidgetType.__init__(self, icon, "Calltree")
 
