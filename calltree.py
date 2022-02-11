@@ -3,7 +3,15 @@ from PySide6.QtGui import (
     QStandardItemModel,
     QStandardItem,
 )
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QTreeView
+from PySide6.QtWidgets import (
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLineEdit,
+    QSpinBox,
+)
 
 
 class BNFuncItem(QStandardItem):
@@ -13,19 +21,60 @@ class BNFuncItem(QStandardItem):
         self.setText(func.name)
 
 
-class CallTreeWidget:
-    def __init__(self, label_name, depth):
+# Layout with search bar and expand/collapse buttons
+# Takes CallTreeLayout as a parameter
+class CallTreeUtilLayout(QHBoxLayout):
+    def __init__(self, calltree: object):
+        super().__init__()
+        self.calltree = calltree
+        btn_size = QSize(25, 25)
+        self.expand_all_button = QPushButton("E")
+        self.expand_all_button.setFixedSize(btn_size)
+        self.expand_all_button.clicked.connect(self.calltree.expand_all)
+
+        self.collapse_all_button = QPushButton("C")
+        self.collapse_all_button.setFixedSize(btn_size)
+        self.collapse_all_button.clicked.connect(self.calltree.collapse_all)
+
+        self.func_filter = QLineEdit()
+        self.func_filter.textChanged.connect(self.calltree.onTextChanged)
+
+        self.spinbox = QSpinBox()
+        self.spinbox.valueChanged.connect(self.spinbox_changed)
+        self.spinbox.setValue(self.calltree.func_depth)
+        super().addWidget(self.func_filter)
+        super().addWidget(self.expand_all_button)
+        super().addWidget(self.collapse_all_button)
+        super().addWidget(self.spinbox)
+
+    def spinbox_changed(self):
+        self.calltree.func_depth = self.spinbox.value()
+        if self.calltree.cur_func is not None:
+            self.calltree.update_widget(self.calltree.cur_func)
+
+
+class CallTreeLayout(QVBoxLayout):
+    def __init__(self, label_name, depth, is_caller: bool):
+        super().__init__()
+        self.cur_func = None
+        self.is_caller = is_caller
+        # Creates treeview for all the function calls
         self.treeview = QTreeView()
         self.model = QStandardItemModel()
         self.proxy_model = QSortFilterProxyModel(self.treeview)
         self.proxy_model.setSourceModel(self.model)
 
         self.treeview.setModel(self.proxy_model)
+
+        # Clicking function on treeview will take you to the function
         self.treeview.doubleClicked.connect(self.goto_func)
         self._func_depth = depth
         self._binary_view = None
         self.label_name = label_name
         self.set_label(self.label_name)
+        super().addWidget(self.treeview)
+        self.util = CallTreeUtilLayout(self)
+        super().addLayout(self.util)
 
     def onTextChanged(self, text):
         self.proxy_model.setRecursiveFilteringEnabled(True)
@@ -79,12 +128,12 @@ class CallTreeWidget:
                             cur_func_call, new_std_item, is_caller, depth + 1
                         )
 
-    def update_widget(self, cur_func, is_caller):
+    def update_widget(self, cur_func):
         # Clear previous calls
         self.clear()
         call_root_node = self.model.invisibleRootItem()
 
-        if is_caller:
+        if self.is_caller:
             cur_func_calls = list(set(cur_func.callers))
         else:
             cur_func_calls = list(set(cur_func.callees))
@@ -97,7 +146,7 @@ class CallTreeWidget:
                 root_std_items.append(BNFuncItem(cur_func_call))
                 cur_std_item = root_std_items[-1]
                 if cur_func != cur_func_call:
-                    self.set_func_calls(cur_func_call, cur_std_item, is_caller)
+                    self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
 
         call_root_node.appendRows(root_std_items)
         self.expand_all()
