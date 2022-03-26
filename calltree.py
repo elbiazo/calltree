@@ -20,6 +20,7 @@ class BNFuncItem(QStandardItem):
         super().__init__()
         self.func = func
         self.setText(func.name)
+        self.setEditable(False)
 
 
 class CurrentFunctionLayout(QHBoxLayout):
@@ -66,10 +67,11 @@ class CallTreeUtilLayout(QHBoxLayout):
 
 
 class CallTreeLayout(QVBoxLayout):
-    def __init__(self, label_name: str, depth: int, is_caller: bool):
+    def __init__(self, label_name: str, depth: int, is_caller: bool, topdown_format: bool):
         super().__init__()
         self._cur_func = None
         self._is_caller = is_caller
+        self._topdown_format = topdown_format
         # Creates treeview for all the function calls
         self._treeview = QTreeView()
         self._model = QStandardItemModel()
@@ -112,6 +114,14 @@ class CallTreeLayout(QVBoxLayout):
     @property
     def is_caller(self):
         return self._is_caller
+
+    @property
+    def topdown_format(self):
+        return self._topdown_format
+
+    @topdown_format.setter
+    def topdown_format(self, topdown_format):
+        self._topdown_format = topdown_format
 
     @property
     def treeview(self):
@@ -187,13 +197,50 @@ class CallTreeLayout(QVBoxLayout):
         # Set root std Items
         if cur_func_calls:
             for cur_func_call in cur_func_calls:
-                root_std_items.append(BNFuncItem(cur_func_call))
+                if self._topdown_format:
+                    root_std_items.append(BNFuncItem(cur_func))
+                    root_std_items[-1].appendRow(BNFuncItem(cur_func_call))
+                else:
+                    root_std_items.append(BNFuncItem(cur_func_call))
                 cur_std_item = root_std_items[-1]
                 if cur_func != cur_func_call:
                     self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
 
-        call_root_node.appendRows(root_std_items)
+        if self._topdown_format:
+            reversed = self.reverse_tree(root_std_items)
+            call_root_node.appendRows(reversed)
+        else:
+            call_root_node.appendRows(root_std_items)
         self.expand_all()
+
+    def reverse_tree(self, tree):
+        tmp = {}
+        reversed = []
+
+        for idx, item in enumerate(tree):
+            tmp[idx] = [item.func]
+            self.walk_tree(item, tmp, idx)
+
+        for idx, lst in tmp.items():
+            item = BNFuncItem(lst.pop())
+            for idx in range(0, len(lst)):
+                self.append_to_lowest_child(item, BNFuncItem(lst.pop()))
+            reversed.append(item)
+
+        return reversed
+
+    def walk_tree(self, item, dict, idx):
+        for row in range(item.rowCount()):
+            dict[idx].append(item.child(row).func)
+            self.walk_tree(item.child(row), dict, idx)
+
+    def append_to_lowest_child(self, item, value):
+        if not item.rowCount():
+            item.appendRow(value)
+        else:
+            for i in range(0, item.rowCount()):
+                child = item.child(i, 0)
+                self.append_to_lowest_child(child, value)
 
     def clear(self):
         self.model.clear()

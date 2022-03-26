@@ -38,7 +38,18 @@ Settings().register_setting(
     }
     """,
 )
-
+Settings().register_setting(
+    "calltree.calltree_format",
+    """
+    {
+        "title" : "Format of calltree display",
+        "type" : "boolean",
+        "default" : true,
+        "description" : "Change the format of the call tree to be top down",
+        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+    }
+    """,
+)
 
 class ScrollLabel(QScrollArea):
 
@@ -99,9 +110,10 @@ class CalltreeSidebarWidget(SidebarWidget):
         # Add widgets to the layout
         in_func_depth = Settings().get_integer("calltree.in_depth")
         out_func_depth = Settings().get_integer("calltree.out_depth")
+        topdown_format = Settings().get_integer("calltree.calltree_format")
 
-        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
-        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
+        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True, topdown_format)
+        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False, False)
 
         cur_func_layout = CurrentFunctionLayout()
 
@@ -126,6 +138,7 @@ class CalltreeSidebarWidget(SidebarWidget):
                 self.prev_func_offset = cur_funcs[0].start
                 cur_func = cur_funcs[0]
                 self.cur_func_text.setText(cur_func.name)
+                self.in_calltree.topdown_format = Settings().get_integer("calltree.calltree_format")
                 self.in_calltree.cur_func = cur_func
                 self.out_calltree.cur_func = cur_func
                 self.in_calltree.update_widget(cur_func)
