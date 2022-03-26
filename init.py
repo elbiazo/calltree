@@ -131,8 +131,10 @@ class CalltreeSidebarWidget(SidebarWidget):
         if not cur_funcs:
             self.prev_func_offset = None
             self.cur_func_text.setText("None")
-            self.in_calltree.clear()
-            self.out_calltree.clear()
+            if not self.in_calltree._lock_table:
+                self.in_calltree.clear()
+            if not self.out_calltree._lock_table:
+                self.out_calltree.clear()
         else:
             if cur_funcs[0].start != self.prev_func_offset:
                 self.prev_func_offset = cur_funcs[0].start

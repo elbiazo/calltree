@@ -1,7 +1,9 @@
+from pathlib import Path
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
     QStandardItem,
+    QIcon
 )
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QTreeView
@@ -52,10 +54,23 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.func_filter = QLineEdit()
         self.func_filter.textChanged.connect(self.calltree.onTextChanged)
 
+        root = Path(__file__).parent
+        # Lock icons created by Freepik - Flaticon
+        self.lock_icon = QIcon(str(root.joinpath("locked.png")))
+        self.unlock_icon = QIcon(str(root.joinpath("unlocked.png")))
+
+        self.lock_table_button = QPushButton()
+        self.lock_table_button.setFixedSize(btn_size)
+        self.lock_table_button.clicked.connect(self.lockbutton_changed)
+        self.lockbutton_state = False
+        self.lock_table_button.setIcon(self.unlock_icon)
+        self.lock_table_button.setIconSize(QSize(15, 15))
+
         self.spinbox = QSpinBox()
         self.spinbox.valueChanged.connect(self.spinbox_changed)
         self.spinbox.setValue(self.calltree.func_depth)
         super().addWidget(self.func_filter)
+        super().addWidget(self.lock_table_button)
         super().addWidget(self.expand_all_button)
         super().addWidget(self.collapse_all_button)
         super().addWidget(self.spinbox)
@@ -65,11 +80,19 @@ class CallTreeUtilLayout(QHBoxLayout):
         if self.calltree.cur_func is not None:
             self.calltree.update_widget(self.calltree.cur_func)
 
+    def lockbutton_changed(self):
+        self.lockbutton_state = ~self.lockbutton_state
+        if(self.lockbutton_state):
+            self.lock_table_button.setIcon(self.lock_icon)
+        else:
+            self.lock_table_button.setIcon(self.unlock_icon)
+        self.calltree._lock_table = self.lockbutton_state
 
 class CallTreeLayout(QVBoxLayout):
     def __init__(self, label_name: str, depth: int, is_caller: bool, topdown_format: bool):
         super().__init__()
         self._cur_func = None
+        self._lock_table = False
         self._is_caller = is_caller
         self._topdown_format = topdown_format
         # Creates treeview for all the function calls
@@ -183,6 +206,9 @@ class CallTreeLayout(QVBoxLayout):
                         )
 
     def update_widget(self, cur_func):
+        if self._lock_table:
+            return
+
         # Clear previous calls
         self.clear()
         call_root_node = self.model.invisibleRootItem()
