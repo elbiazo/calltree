@@ -38,19 +38,7 @@ Settings().register_setting(
     }
     """,
 )
-Settings().register_setting(
-    "calltree.calltree_format",
-    """
-    {
-        "title": "Format of calltree display",
-        "description": "Select a preferred format for the calltree layout",
-        "type": "string",
-        "enum": ["Top Down (Display Current Function)", "Top Down", "Bottom Up"],
-        "default": "Top Down (Display Current Function)",
-        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
-    }
-    """,
-)
+
 
 class ScrollLabel(QScrollArea):
 
@@ -131,17 +119,13 @@ class CalltreeSidebarWidget(SidebarWidget):
         if not cur_funcs:
             self.prev_func_offset = None
             self.cur_func_text.setText("None")
-            if not self.in_calltree._lock_table:
-                self.in_calltree.clear()
-            if not self.out_calltree._lock_table:
-                self.out_calltree.clear()
+            self.in_calltree.clear()
+            self.out_calltree.clear()
         else:
             if cur_funcs[0].start != self.prev_func_offset:
                 self.prev_func_offset = cur_funcs[0].start
                 cur_func = cur_funcs[0]
                 self.cur_func_text.setText(cur_func.name)
-                self.in_calltree.calltree_format = Settings().get_string("calltree.calltree_format")
-                self.out_calltree.calltree_format = "Bottom Up"
                 self.in_calltree.cur_func = cur_func
                 self.out_calltree.cur_func = cur_func
                 self.in_calltree.update_widget(cur_func)
