@@ -1,7 +1,9 @@
+from pathlib import Path
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
     QStandardItem,
+    QIcon
 )
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QTreeView
@@ -14,12 +16,18 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
+CallTreeFormat  = {
+    "Top Down (Display Current Function)": 0,
+    "Top Down" : 1,
+    "Bottom Up": 2,
+}
 
 class BNFuncItem(QStandardItem):
     def __init__(self, func):
         super().__init__()
         self.func = func
         self.setText(func.name)
+        self.setEditable(False)
 
 
 class CurrentFunctionLayout(QHBoxLayout):
@@ -51,10 +59,23 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.func_filter = QLineEdit()
         self.func_filter.textChanged.connect(self.calltree.onTextChanged)
 
+        root = Path(__file__).parent
+        # Lock icons created by Freepik - Flaticon
+        self.lock_icon = QIcon(str(root.joinpath("locked.png")))
+        self.unlock_icon = QIcon(str(root.joinpath("unlocked.png")))
+
+        self.lock_table_button = QPushButton()
+        self.lock_table_button.setFixedSize(btn_size)
+        self.lock_table_button.clicked.connect(self.lockbutton_changed)
+        self.lockbutton_state = False
+        self.lock_table_button.setIcon(self.unlock_icon)
+        self.lock_table_button.setIconSize(QSize(15, 15))
+
         self.spinbox = QSpinBox()
         self.spinbox.valueChanged.connect(self.spinbox_changed)
         self.spinbox.setValue(self.calltree.func_depth)
         super().addWidget(self.func_filter)
+        super().addWidget(self.lock_table_button)
         super().addWidget(self.expand_all_button)
         super().addWidget(self.collapse_all_button)
         super().addWidget(self.spinbox)
@@ -64,12 +85,23 @@ class CallTreeUtilLayout(QHBoxLayout):
         if self.calltree.cur_func is not None:
             self.calltree.update_widget(self.calltree.cur_func)
 
+    def lockbutton_changed(self):
+        self.lockbutton_state = ~self.lockbutton_state
+        self.calltree._lock_table = self.lockbutton_state
+        if(self.lockbutton_state):
+            self.lock_table_button.setIcon(self.lock_icon)
+        else:
+            self.lock_table_button.setIcon(self.unlock_icon)
+            bv = self.calltree.get_bv()
+            self.calltree.update_widget(bv.get_function_at(bv.offset))
 
 class CallTreeLayout(QVBoxLayout):
     def __init__(self, label_name: str, depth: int, is_caller: bool):
         super().__init__()
         self._cur_func = None
+        self._lock_table = False
         self._is_caller = is_caller
+        self._calltree_format = None
         # Creates treeview for all the function calls
         self._treeview = QTreeView()
         self._model = QStandardItemModel()
@@ -114,6 +146,14 @@ class CallTreeLayout(QVBoxLayout):
         return self._is_caller
 
     @property
+    def calltree_format(self):
+        return self._calltree_format
+
+    @calltree_format.setter
+    def calltree_format(self, calltree_format):
+        self._calltree_format = calltree_format
+
+    @property
     def treeview(self):
         return self._treeview
 
@@ -154,6 +194,9 @@ class CallTreeLayout(QVBoxLayout):
         cur_func = self.model.itemFromIndex(self.proxy_model.mapToSource(index)).func
         self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
+    def get_bv(self):
+        return self._binary_view
+
     def set_func_calls(self, cur_func, cur_std_item, is_caller: bool, depth=0):
         if is_caller:
             cur_func_calls = list(set(cur_func.callers))
@@ -173,6 +216,9 @@ class CallTreeLayout(QVBoxLayout):
                         )
 
     def update_widget(self, cur_func):
+        if self._lock_table:
+            return
+
         # Clear previous calls
         self.clear()
         call_root_node = self.model.invisibleRootItem()
@@ -187,13 +233,50 @@ class CallTreeLayout(QVBoxLayout):
         # Set root std Items
         if cur_func_calls:
             for cur_func_call in cur_func_calls:
-                root_std_items.append(BNFuncItem(cur_func_call))
+                if (CallTreeFormat[self.calltree_format] == 0): # display current function
+                    root_std_items.append(BNFuncItem(cur_func))
+                    root_std_items[-1].appendRow(BNFuncItem(cur_func_call))
+                else:
+                    root_std_items.append(BNFuncItem(cur_func_call))
                 cur_std_item = root_std_items[-1]
                 if cur_func != cur_func_call:
                     self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
 
-        call_root_node.appendRows(root_std_items)
+        if (CallTreeFormat[self.calltree_format] == 0 or CallTreeFormat[self.calltree_format] == 1):
+            reversed = self.reverse_tree(root_std_items)
+            call_root_node.appendRows(reversed)
+        else:
+            call_root_node.appendRows(root_std_items)
         self.expand_all()
+
+    def reverse_tree(self, tree):
+        tmp = {}
+        reversed = []
+
+        for idx, item in enumerate(tree):
+            tmp[idx] = [item.func]
+            self.walk_tree(item, tmp, idx)
+
+        for idx, lst in tmp.items():
+            item = BNFuncItem(lst.pop())
+            for idx in range(0, len(lst)):
+                self.append_to_lowest_child(item, BNFuncItem(lst.pop()))
+            reversed.append(item)
+
+        return reversed
+
+    def walk_tree(self, item, dict, idx):
+        for row in range(item.rowCount()):
+            dict[idx].append(item.child(row).func)
+            self.walk_tree(item.child(row), dict, idx)
+
+    def append_to_lowest_child(self, item, value):
+        if not item.rowCount():
+            item.appendRow(value)
+        else:
+            for i in range(0, item.rowCount()):
+                child = item.child(i, 0)
+                self.append_to_lowest_child(child, value)
 
     def clear(self):
         self.model.clear()
