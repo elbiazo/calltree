@@ -16,6 +16,11 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
+CallTreeFormat  = {
+    "Top Down (Display Current Function)": 0,
+    "Top Down" : 1,
+    "Bottom Up": 2,
+}
 
 class BNFuncItem(QStandardItem):
     def __init__(self, func):
@@ -82,19 +87,21 @@ class CallTreeUtilLayout(QHBoxLayout):
 
     def lockbutton_changed(self):
         self.lockbutton_state = ~self.lockbutton_state
+        self.calltree._lock_table = self.lockbutton_state
         if(self.lockbutton_state):
             self.lock_table_button.setIcon(self.lock_icon)
         else:
             self.lock_table_button.setIcon(self.unlock_icon)
-        self.calltree._lock_table = self.lockbutton_state
+            bv = self.calltree.get_bv()
+            self.calltree.update_widget(bv.get_function_at(bv.offset))
 
 class CallTreeLayout(QVBoxLayout):
-    def __init__(self, label_name: str, depth: int, is_caller: bool, topdown_format: bool):
+    def __init__(self, label_name: str, depth: int, is_caller: bool):
         super().__init__()
         self._cur_func = None
         self._lock_table = False
         self._is_caller = is_caller
-        self._topdown_format = topdown_format
+        self._calltree_format = None
         # Creates treeview for all the function calls
         self._treeview = QTreeView()
         self._model = QStandardItemModel()
@@ -139,12 +146,12 @@ class CallTreeLayout(QVBoxLayout):
         return self._is_caller
 
     @property
-    def topdown_format(self):
-        return self._topdown_format
+    def calltree_format(self):
+        return self._calltree_format
 
-    @topdown_format.setter
-    def topdown_format(self, topdown_format):
-        self._topdown_format = topdown_format
+    @calltree_format.setter
+    def calltree_format(self, calltree_format):
+        self._calltree_format = calltree_format
 
     @property
     def treeview(self):
@@ -187,6 +194,9 @@ class CallTreeLayout(QVBoxLayout):
         cur_func = self.model.itemFromIndex(self.proxy_model.mapToSource(index)).func
         self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
+    def get_bv(self):
+        return self._binary_view
+
     def set_func_calls(self, cur_func, cur_std_item, is_caller: bool, depth=0):
         if is_caller:
             cur_func_calls = list(set(cur_func.callers))
@@ -223,7 +233,7 @@ class CallTreeLayout(QVBoxLayout):
         # Set root std Items
         if cur_func_calls:
             for cur_func_call in cur_func_calls:
-                if self._topdown_format:
+                if (CallTreeFormat[self.calltree_format] == 0): # display current function
                     root_std_items.append(BNFuncItem(cur_func))
                     root_std_items[-1].appendRow(BNFuncItem(cur_func_call))
                 else:
@@ -232,7 +242,7 @@ class CallTreeLayout(QVBoxLayout):
                 if cur_func != cur_func_call:
                     self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
 
-        if self._topdown_format:
+        if (CallTreeFormat[self.calltree_format] == 0 or CallTreeFormat[self.calltree_format] == 1):
             reversed = self.reverse_tree(root_std_items)
             call_root_node.appendRows(reversed)
         else:
