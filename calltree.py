@@ -48,11 +48,11 @@ class CallTreeUtilLayout(QHBoxLayout):
         super().__init__()
         self.calltree = calltree
         btn_size = QSize(25, 25)
-        self.expand_all_button = QPushButton("E")
+        self.expand_all_button = QPushButton("+")
         self.expand_all_button.setFixedSize(btn_size)
         self.expand_all_button.clicked.connect(self.calltree.expand_all)
 
-        self.collapse_all_button = QPushButton("C")
+        self.collapse_all_button = QPushButton("-")
         self.collapse_all_button.setFixedSize(btn_size)
         self.collapse_all_button.clicked.connect(self.calltree.collapse_all)
 
