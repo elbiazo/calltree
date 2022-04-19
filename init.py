@@ -11,7 +11,7 @@ from PySide6.QtGui import QImage
 
 from .calltree import CallTreeLayout, CurrentFunctionLayout
 from binaryninja.settings import Settings
-
+from .demangle import demangle_name
 instance_id = 0
 Settings().register_group("calltree", "Calltree")
 Settings().register_setting(
@@ -125,7 +125,7 @@ class CalltreeSidebarWidget(SidebarWidget):
             if cur_funcs[0].start != self.prev_func_offset:
                 self.prev_func_offset = cur_funcs[0].start
                 cur_func = cur_funcs[0]
-                self.cur_func_text.setText(cur_func.name)
+                self.cur_func_text.setText(demangle_name(self.binary_view, cur_func.name))
                 self.in_calltree.cur_func = cur_func
                 self.out_calltree.cur_func = cur_func
                 self.in_calltree.update_widget(cur_func)
