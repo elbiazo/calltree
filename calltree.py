@@ -14,12 +14,14 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
+from .demangle import demangle_name
 
 class BNFuncItem(QStandardItem):
-    def __init__(self, func):
+    def __init__(self, bv, func):
         super().__init__()
         self.func = func
-        self.setText(func.name)
+        self.bv = bv
+        self.setText(demangle_name(self.bv, func.name))
 
 
 class CurrentFunctionLayout(QHBoxLayout):
@@ -163,7 +165,7 @@ class CallTreeLayout(QVBoxLayout):
         if depth < self._func_depth:
             if cur_func_calls:
                 for cur_func_call in cur_func_calls:
-                    new_std_item = BNFuncItem(cur_func_call)
+                    new_std_item = BNFuncItem(self._binary_view, cur_func_call)
                     cur_std_item.appendRow(new_std_item)
 
                     # Dont search on function that calls itself
@@ -187,7 +189,7 @@ class CallTreeLayout(QVBoxLayout):
         # Set root std Items
         if cur_func_calls:
             for cur_func_call in cur_func_calls:
-                root_std_items.append(BNFuncItem(cur_func_call))
+                root_std_items.append(BNFuncItem(self._binary_view, cur_func_call))
                 cur_std_item = root_std_items[-1]
                 if cur_func != cur_func_call:
                     self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
