@@ -53,3 +53,10 @@ When working with really big binaries with alot of xrefs, you would want to chan
 **Default Recursion Depth in Setting**
 
 ![](images/2022-02-09-16-59-03.png)
+
+## Contributors
+
+Thanks everyone that have contributed to calltree!
+
+* galenbwill
+* droogie
