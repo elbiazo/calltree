@@ -10,6 +10,8 @@ Generates call tree
 
 ## Releases
 
+* 1.2 -- Bug Fixes
+* 1.1 -- Refactoring
 * 1.0 -- Public Release
 * 0.0 -- Beta Release
 
