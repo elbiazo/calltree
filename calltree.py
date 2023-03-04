@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
@@ -12,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QSpinBox,
     QTextEdit,
+    QMenu,
 )
 
 from .demangle import demangle_name
@@ -38,17 +41,19 @@ class CurrentFunctionLayout(QHBoxLayout):
 # Layout with search bar and expand/collapse buttons
 # Takes CallTreeLayout as a parameter
 class CallTreeUtilLayout(QHBoxLayout):
-    def __init__(self, calltree: object):
+    def __init__(self, calltree: CallTreeLayout):
         super().__init__()
         self.calltree = calltree
         btn_size = QSize(25, 25)
         self.expand_all_button = QPushButton("+")
         self.expand_all_button.setFixedSize(btn_size)
         self.expand_all_button.clicked.connect(self.calltree.expand_all)
+        self.expand_all_button.setToolTip("Expand All")
 
         self.collapse_all_button = QPushButton("-")
         self.collapse_all_button.setFixedSize(btn_size)
         self.collapse_all_button.clicked.connect(self.calltree.collapse_all)
+        self.collapse_all_button.setToolTip("Collapse All")
 
         self.func_filter = QLineEdit()
         self.func_filter.textChanged.connect(self.calltree.onTextChanged)
@@ -82,6 +87,8 @@ class CallTreeLayout(QVBoxLayout):
 
         # Clicking function on treeview will take you to the function
         self.treeview.doubleClicked.connect(self.goto_func)
+        self.treeview.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.treeview.customContextMenuRequested.connect(self.context_menu)
         self._func_depth = depth
         self._binary_view = None
         self._label_name = label_name
@@ -151,6 +158,14 @@ class CallTreeLayout(QVBoxLayout):
 
     def collapse_all(self):
         self.treeview.collapseAll()
+
+    def context_menu(self, position):
+        menu = QMenu()
+        collapse = menu.addAction("Collapse All")
+        collapse.triggered.connect(self.collapse_all)
+        expand = menu.addAction("Expand All")
+        expand.triggered.connect(self.expand_all)
+        menu.exec_(self.treeview.mapToGlobal(position))
 
     def goto_func(self, index):
         cur_func = self.model.itemFromIndex(self.proxy_model.mapToSource(index)).func
