@@ -1,3 +1,5 @@
+from typing import cast
+
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
@@ -14,14 +16,17 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
+from binaryninja import BinaryView, Function
+
 from .demangle import demangle_name
 
 class BNFuncItem(QStandardItem):
-    def __init__(self, bv, func):
+    def __init__(self, bv: BinaryView, func: Function):
         super().__init__()
         self.func = func
         self.bv = bv
         self.setText(demangle_name(self.bv, func.name))
+        self.setEditable(False)
 
 
 class CurrentFunctionLayout(QHBoxLayout):
@@ -72,6 +77,8 @@ class CallTreeLayout(QVBoxLayout):
         super().__init__()
         self._cur_func = None
         self._is_caller = is_caller
+        self._skip_update = False
+
         # Creates treeview for all the function calls
         self._treeview = QTreeView()
         self._model = QStandardItemModel()
@@ -79,9 +86,12 @@ class CallTreeLayout(QVBoxLayout):
         self.proxy_model.setSourceModel(self.model)
 
         self.treeview.setModel(self.proxy_model)
+        self.treeview.setExpandsOnDoubleClick(False)
 
         # Clicking function on treeview will take you to the function
+        self.treeview.clicked.connect(self.goto_first_func_use)
         self.treeview.doubleClicked.connect(self.goto_func)
+
         self._func_depth = depth
         self._binary_view = None
         self._label_name = label_name
@@ -120,10 +130,6 @@ class CallTreeLayout(QVBoxLayout):
         return self._treeview
 
     @property
-    def func_depth(self):
-        return self._func_depth
-
-    @property
     def model(self):
         return self._model
 
@@ -143,6 +149,18 @@ class CallTreeLayout(QVBoxLayout):
     def func_depth(self, depth):
         self._func_depth = depth
 
+    @property
+    def skip_update(self) -> bool:
+        """
+        Tells parent view that it should skip updating the sidebar.
+        Parent will then set it True once it has been skipped
+        """
+        return self._skip_update
+
+    @skip_update.setter
+    def skip_update(self, value: bool):
+        self._skip_update = value
+
     def get_treeview(self):
         return self.treeview
 
@@ -152,8 +170,35 @@ class CallTreeLayout(QVBoxLayout):
     def collapse_all(self):
         self.treeview.collapseAll()
 
+    def goto_first_func_use(self, index):
+        index = self.proxy_model.mapToSource(index)
+        item = cast(BNFuncItem, self.model.itemFromIndex(index))
+        bv = item.bv
+        
+        parent_item = cast(BNFuncItem, self.model.itemFromIndex(index.parent()))
+        parent_func = parent_item.func if parent_item else self.cur_func
+        if parent_func is None:
+            return
+
+        if self.is_caller:
+            caller, callee = item.func, parent_func 
+        else:
+            caller, callee = parent_func, item.func
+
+        for ref in caller.call_sites:
+            if callee.start in bv.get_callees(ref.address, ref.function):
+                break
+        else:
+            # callee not found in callers
+            return
+
+        self._skip_update = True
+        self._binary_view.navigate(self._binary_view.view, ref.address)
+
     def goto_func(self, index):
         cur_func = self.model.itemFromIndex(self.proxy_model.mapToSource(index)).func
+        # make sure that sidebar is updated
+        self._skip_update = False
         self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
     def set_func_calls(self, cur_func, cur_std_item, is_caller: bool, depth=0):
@@ -174,10 +219,12 @@ class CallTreeLayout(QVBoxLayout):
                             cur_func_call, new_std_item, is_caller, depth + 1
                         )
 
-    def update_widget(self, cur_func):
+    def update_widget(self, cur_func: Function):
         # Clear previous calls
         self.clear()
         call_root_node = self.model.invisibleRootItem()
+
+        self.cur_func = cur_func
 
         if self.is_caller:
             cur_func_calls = list(set(cur_func.callers))

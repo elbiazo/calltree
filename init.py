@@ -91,7 +91,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.data = data
         self.actionHandler = UIActionHandler()
         self.actionHandler.setupActionHandler(self)
-        self.prev_func_offset = None
+        self.prev_location = None
         self.binary_view = None
 
         # Create a QHBoxLayout instance
@@ -112,36 +112,66 @@ class CalltreeSidebarWidget(SidebarWidget):
         calltree_layout.addLayout(self.out_calltree)
 
         self.setLayout(calltree_layout)
-
-    def notifyOffsetChanged(self, offset):
-        cur_funcs = self.binary_view.get_functions_containing(offset)
-
-        if not cur_funcs:
-            self.prev_func_offset = None
+        
+    def notifyViewLocationChanged(self, view, location):
+        def extract_location_info(location):
+            # make a copy of location values so that they are retained after 
+            # location object is freed
+            return [
+                location.getOffset(),
+                location.getInstrIndex(),
+                location.getFunction(),
+            ]
+            
+        cur_func = location.getFunction()
+        if cur_func is None:
+            self.prev_location = None 
             self.cur_func_text.setText("None")
             self.in_calltree.clear()
             self.out_calltree.clear()
-        else:
-            if cur_funcs[0].start != self.prev_func_offset:
-                self.prev_func_offset = cur_funcs[0].start
-                cur_func = cur_funcs[0]
-                self.cur_func_text.setText(demangle_name(self.binary_view, cur_func.name))
-                self.in_calltree.cur_func = cur_func
-                self.out_calltree.cur_func = cur_func
-                self.in_calltree.update_widget(cur_func)
-                self.out_calltree.update_widget(cur_func)
+            return
 
+        if self.prev_location:
+            offset, index, *_ = self.prev_location
+            if offset == location.getOffset() and index != location.getInstrIndex():
+                # sometimes same address is called multiple times with different
+                # InstrIndex. Update previous and do not take any further actions
+                self.prev_location = extract_location_info(location)
+                return
+
+        skip_update = any((
+            self.in_calltree.skip_update, self.out_calltree.skip_update
+        ))
+        
+        # check if any treeview wants the update to be skipped
+        if skip_update:
+            # do not update, but reset it to false
+            self.in_calltree.skip_update = False
+            self.out_calltree.skip_update = False
+        else:
+            self.cur_func_text.setText(demangle_name(self.binary_view, cur_func.name))
+            self.in_calltree.update_widget(cur_func)
+            self.out_calltree.update_widget(cur_func)
+
+        self.prev_location = extract_location_info(location)
+        
     def notifyViewChanged(self, view_frame):
         if view_frame is None:
             self.datatype.setText("None")
             self.data = None
-        else:
-            self.datatype.setText(view_frame.getCurrentView())
-            view = view_frame.getCurrentViewInterface()
-            self.data = view.getData()
-            self.binary_view = view_frame.actionContext().binaryView
-            self.in_calltree.binary_view = self.binary_view
-            self.out_calltree.binary_view = self.binary_view
+            return
+
+        new_binaryview = view_frame.actionContext().binaryView
+        if self.binary_view == new_binaryview:
+            return
+
+        # only update if view has changed
+        self.binary_view = new_binaryview
+        self.datatype.setText(view_frame.getCurrentView())
+        view = view_frame.getCurrentViewInterface()
+        self.data = view.getData()
+        self.in_calltree.binary_view = self.binary_view
+        self.out_calltree.binary_view = self.binary_view
 
     def contextMenuEvent(self, event):
         self.m_contextMenuManager.show(self.m_menu, self.actionHandler)
