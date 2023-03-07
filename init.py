@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QImage
 
-from .calltree import CallTreeLayout, CurrentFunctionNameLayout, CurrentCalltreeWidget
+from .calltree import CallTreeLayout, CurrentFunctionNameLayout, CalltreeWidget
 from binaryninja.settings import Settings
 from .demangle import demangle_name
 
@@ -136,7 +136,7 @@ class CalltreeSidebarWidget(SidebarWidget):
 
         # calltree tab
         self.calltree_tab = QTabWidget()
-        self.current_calltree = CurrentCalltreeWidget()
+        self.current_calltree = CalltreeWidget()
         self.calltree_tab.addTab(self.current_calltree, "Current")
 
         calltree_layout.addLayout(calltree_options)
@@ -150,7 +150,7 @@ class CalltreeSidebarWidget(SidebarWidget):
             self.calltree_tab.removeTab(cur_tab_index)
 
     def pin_current_tab(self):
-        pinned_calltree = CurrentCalltreeWidget()
+        pinned_calltree = CalltreeWidget()
         cur_func_name = self.current_calltree.cur_func_text.toPlainText()
         pinned_calltree.cur_func_text.setText(cur_func_name)
 
@@ -159,6 +159,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         pinned_calltree.out_calltree.binary_view = self.binary_view
         pinned_calltree.in_calltree.update_widget(self.cur_func)
         pinned_calltree.out_calltree.update_widget(self.cur_func)
+        pinned_calltree.cur_func_layout.binary_view = self.binary_view
 
         max_pinned_name_len = Settings().get_integer("calltree.pin_name_len")
         self.calltree_tab.addTab(pinned_calltree, cur_func_name[:max_pinned_name_len])
@@ -227,6 +228,7 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.data = view.getData()
         self.current_calltree.in_calltree.binary_view = self.binary_view
         self.current_calltree.out_calltree.binary_view = self.binary_view
+        self.current_calltree.cur_func_layout.binary_view = self.binary_view
 
     def contextMenuEvent(self, event):
         self.m_contextMenuManager.show(self.m_menu, self.actionHandler)

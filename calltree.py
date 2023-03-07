@@ -24,7 +24,7 @@ from binaryninja import BinaryView, Function
 from .demangle import demangle_name
 
 
-class CurrentCalltreeWidget(QWidget):
+class CalltreeWidget(QWidget):
     def __init__(self):
         super().__init__()
         calltree_layout = QVBoxLayout()
@@ -34,11 +34,11 @@ class CurrentCalltreeWidget(QWidget):
 
         self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
         self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
-        cur_func_layout = CurrentFunctionNameLayout()
+        self.cur_func_layout = CurrentFunctionNameLayout()
 
-        self.cur_func_text = cur_func_layout.cur_func_text
+        self.cur_func_text = self.cur_func_layout.cur_func_text
 
-        calltree_layout.addLayout(cur_func_layout)
+        calltree_layout.addLayout(self.cur_func_layout)
         calltree_layout.addLayout(self.in_calltree)
         calltree_layout.addLayout(self.out_calltree)
 
@@ -57,13 +57,32 @@ class BNFuncItem(QStandardItem):
 class CurrentFunctionNameLayout(QHBoxLayout):
     def __init__(self):
         super().__init__()
+        self._binary_view = None
         self.cur_func_text = QTextEdit()
         self.cur_func_text.setReadOnly(True)
         self.cur_func_text.setMaximumHeight(40)
         self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
+        self.cur_func_text.mousePressEvent = self.goto_func
 
         super().addWidget(self.cur_func_text)
+
+    @property
+    def binary_view(self):
+        return self._binary_view
+
+    @binary_view.setter
+    def binary_view(self, bv):
+        self._binary_view = bv
+
+    # TODO: really should check the address as well as name. just going to function name might fail
+    def goto_func(self, event):
+        # just get the first one
+        cur_func = self._binary_view.get_functions_by_name(
+            self.cur_func_text.toPlainText()
+        )[0]
+        # make sure that sidebar is updated
+        self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
 
 # Layout with search bar and expand/collapse buttons
