@@ -10,7 +10,7 @@
    "api": [
       "python3"
    ],
-   "description": "Generates calltree",
+   "description": "Generates calltree. Alternative view for callgraph",
    "longdescription": "Generates calltree for current function. Alternative view for callgraph",
    "license": {
       "name": "MIT",

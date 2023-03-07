@@ -16,8 +16,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QHBoxLayout,
+    QStyle,
 )
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QIcon, QPixmap
 
 from .calltree import CallTreeLayout, CurrentFunctionNameLayout, CalltreeWidget
 from binaryninja.settings import Settings
@@ -55,7 +56,7 @@ Settings().register_setting(
     {
         "title" : "Pinned Name Length",
         "type" : "number",
-        "default" : 5,
+        "default" : 10,
         "description" : "Max length of string to display in pinned tabs",
         "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
     }
@@ -122,11 +123,10 @@ class CalltreeSidebarWidget(SidebarWidget):
         calltree_options = QHBoxLayout()
 
         self.pin_tab_button = QPushButton("P")
-        btn_size = QSize(25, 25)
+        btn_size = QSize(50, 25)
         self.pin_tab_button.setFixedSize(btn_size)
         self.pin_tab_button.clicked.connect(self.pin_current_tab)
         self.remove_current_tab_button = QPushButton("R")
-        btn_size = QSize(25, 25)
         self.remove_current_tab_button.setFixedSize(btn_size)
         self.remove_current_tab_button.clicked.connect(self.remove_current_tab)
 
@@ -150,19 +150,22 @@ class CalltreeSidebarWidget(SidebarWidget):
             self.calltree_tab.removeTab(cur_tab_index)
 
     def pin_current_tab(self):
-        pinned_calltree = CalltreeWidget()
-        cur_func_name = self.current_calltree.cur_func_text.toPlainText()
-        pinned_calltree.cur_func_text.setText(cur_func_name)
+        if self.cur_func is not None:
+            pinned_calltree = CalltreeWidget()
+            cur_func_name = self.current_calltree.cur_func_text.toPlainText()
+            pinned_calltree.cur_func_text.setText(cur_func_name)
 
-        # TODO: find a way to do deepcopy instead of updating widget everytime
-        pinned_calltree.in_calltree.binary_view = self.binary_view
-        pinned_calltree.out_calltree.binary_view = self.binary_view
-        pinned_calltree.in_calltree.update_widget(self.cur_func)
-        pinned_calltree.out_calltree.update_widget(self.cur_func)
-        pinned_calltree.cur_func_layout.binary_view = self.binary_view
+            # TODO: find a way to do deepcopy instead of updating widget everytime
+            pinned_calltree.in_calltree.binary_view = self.binary_view
+            pinned_calltree.out_calltree.binary_view = self.binary_view
+            pinned_calltree.in_calltree.update_widget(self.cur_func)
+            pinned_calltree.out_calltree.update_widget(self.cur_func)
+            pinned_calltree.cur_func_layout.binary_view = self.binary_view
 
-        max_pinned_name_len = Settings().get_integer("calltree.pin_name_len")
-        self.calltree_tab.addTab(pinned_calltree, cur_func_name[:max_pinned_name_len])
+            max_pinned_name_len = Settings().get_integer("calltree.pin_name_len")
+            self.calltree_tab.addTab(
+                pinned_calltree, cur_func_name[:max_pinned_name_len]
+            )
 
     def notifyViewLocationChanged(self, view, location):
         def extract_location_info(location):

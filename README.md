@@ -6,10 +6,11 @@ Calltree generator for function
 
 ## Description:
 
-Generates call tree
+Generates call tree. Alternative view for callgraph.
 
 ## Releases
 
+* 2.0 -- Multiview Support
 * 1.2 -- Bug Fixes
 * 1.1 -- Refactoring
 * 1.0 -- Public Release
@@ -30,23 +31,27 @@ This plugin is released under an [MIT license](./LICENSE).
 When working with really big binaries with alot of xrefs, you would want to change recursive depth to smaller number or else Binary Ninja might hang.
 ## Description
 
-![](images/2022-02-09-16-42-57.png)
+Calltree is a plugin that generates call tree for a function. It is an alternative view for callgraph. It is a multiview plugin, so you can have multiple calltree views open at the same time.
+
+### Default View
+
+![](images/2023-03-06-23-31-27.png)
 
 ### Expand and Collapse tree
 
 **Expand**
 
-![](images/2022-02-09-16-50-03.png)
+![](images/2023-03-06-23-44-02.png)
 
 **Collapse**
 
-![](images/2022-02-09-16-51-28.png)
+![](images/2023-03-06-23-44-24.png)
 
 **Search**
 
 ![](images/2022-02-09-16-53-33.png)
 
-**Recursion Depth**
+### Recursion Depth
 
 **Show Only Root Level**
 
@@ -56,9 +61,21 @@ When working with really big binaries with alot of xrefs, you would want to chan
 
 ![](images/2022-02-09-16-59-03.png)
 
+### Pinning and Removing Calltree View
+
+**Pinning Calltree View**
+
+![](images/2023-03-06-23-40-42.png)
+
+**Pinned Calltree Name Max Length**
+
+![](images/2023-03-06-23-46-04.png)
+
+
 ## Contributors
 
 Thanks everyone that have contributed to calltree!
 
 * galenbwill
 * droogie
+* bambu
