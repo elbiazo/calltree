@@ -61,7 +61,7 @@ class CurrentFunctionNameLayout(QHBoxLayout):
         self._binary_view = None
         self.cur_func_text = QTextEdit()
         self.cur_func_text.setReadOnly(True)
-        self.cur_func_text.setMaximumHeight(30)
+        self.cur_func_text.setMaximumHeight(40)
         self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
         self.cur_func_text.mousePressEvent = self.goto_func
