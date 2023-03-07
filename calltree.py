@@ -1,5 +1,3 @@
-from typing import cast
-
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
@@ -42,6 +40,8 @@ class CalltreeWidget(QWidget):
         calltree_layout.addLayout(self.in_calltree)
         calltree_layout.addLayout(self.out_calltree)
 
+        calltree_layout.setSpacing(0)
+        calltree_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(calltree_layout)
 
 

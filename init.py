@@ -141,6 +141,8 @@ class CalltreeSidebarWidget(SidebarWidget):
 
         calltree_layout.addLayout(calltree_options)
         calltree_layout.addWidget(self.calltree_tab)
+        calltree_layout.setContentsMargins(0, 0, 0, 0)
+        calltree_layout.setSpacing(0)
         self.setLayout(calltree_layout)
 
     def remove_current_tab(self):
