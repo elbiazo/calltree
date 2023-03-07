@@ -14,11 +14,36 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QSpinBox,
     QTextEdit,
+    QWidget,
+    QTabWidget,
 )
+from binaryninja.settings import Settings
 
 from binaryninja import BinaryView, Function
 
 from .demangle import demangle_name
+
+
+class CurrentCalltreeWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        calltree_layout = QVBoxLayout()
+        # Add widgets to the layout
+        in_func_depth = Settings().get_integer("calltree.in_depth")
+        out_func_depth = Settings().get_integer("calltree.out_depth")
+
+        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
+        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
+        cur_func_layout = CurrentFunctionNameLayout()
+
+        self.cur_func_text = cur_func_layout.cur_func_text
+
+        calltree_layout.addLayout(cur_func_layout)
+        calltree_layout.addLayout(self.in_calltree)
+        calltree_layout.addLayout(self.out_calltree)
+
+        self.setLayout(calltree_layout)
+
 
 class BNFuncItem(QStandardItem):
     def __init__(self, bv: BinaryView, func: Function):
@@ -29,7 +54,7 @@ class BNFuncItem(QStandardItem):
         self.setEditable(False)
 
 
-class CurrentFunctionLayout(QHBoxLayout):
+class CurrentFunctionNameLayout(QHBoxLayout):
     def __init__(self):
         super().__init__()
         self.cur_func_text = QTextEdit()
@@ -37,6 +62,7 @@ class CurrentFunctionLayout(QHBoxLayout):
         self.cur_func_text.setMaximumHeight(40)
         self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
+
         super().addWidget(self.cur_func_text)
 
 
@@ -174,14 +200,14 @@ class CallTreeLayout(QVBoxLayout):
         index = self.proxy_model.mapToSource(index)
         item = cast(BNFuncItem, self.model.itemFromIndex(index))
         bv = item.bv
-        
+
         parent_item = cast(BNFuncItem, self.model.itemFromIndex(index.parent()))
         parent_func = parent_item.func if parent_item else self.cur_func
         if parent_func is None:
             return
 
         if self.is_caller:
-            caller, callee = item.func, parent_func 
+            caller, callee = item.func, parent_func
         else:
             caller, callee = parent_func, item.func
 
