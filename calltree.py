@@ -1,3 +1,4 @@
+from typing import cast
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
