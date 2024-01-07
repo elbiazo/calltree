@@ -62,6 +62,45 @@ Settings().register_setting(
     }
     """,
 )
+Settings().register_setting(
+    "calltree.limit",
+    """
+    {
+        "title" : "Total limit",
+        "type" : "number",
+        "default" : 1000,
+        "description" : "Total limit of items in (sub)tree",
+        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+    }
+    """,
+)
+Settings().register_setting(
+    "calltree.blacklisted",
+    """
+    {
+        "title" : "Blacklisted functions - won't appear in callees tab",
+        "type" : "array",
+        "elementType" : "string",
+        "default" : [\"_LOG_.*\", \".*printf.*\", \".*stack_chk_fail\", "_ERR_.*", "log_function.*","debug_log.*"],
+        "description" : "List of functions which will be not expanded",
+        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+    }
+    """,
+)
+
+Settings().register_setting(
+    "calltree.hard_blacklist",
+    """
+    {
+        "title" : "Hard blacklisted functions",
+        "type" : "array",
+        "elementType" : "string",
+        "default" : [\".*stack_chk_fail\"],
+        "description" : "List of functions which will be not processed at all",
+        "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
+    }
+    """,
+)
 
 
 class ScrollLabel(QScrollArea):
