@@ -1,3 +1,4 @@
+import re
 from typing import cast
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
@@ -30,9 +31,14 @@ class CalltreeWidget(QWidget):
         # Add widgets to the layout
         in_func_depth = Settings().get_integer("calltree.in_depth")
         out_func_depth = Settings().get_integer("calltree.out_depth")
+        blacklisted = Settings().get_string_list("calltree.blacklisted")
+        hard_blacklist = Settings().get_string_list("calltree.hard_blacklist")
+        limit = Settings().get_integer("calltree.limit")
 
-        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
-        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
+        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True, \
+                                          blacklisted, hard_blacklist, limit)
+        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False, \
+                                           blacklisted, hard_blacklist, limit)
         self.cur_func_layout = CurrentFunctionNameLayout()
 
         self.cur_func_text = self.cur_func_layout.cur_func_text
@@ -119,11 +125,14 @@ class CallTreeUtilLayout(QHBoxLayout):
 
 
 class CallTreeLayout(QVBoxLayout):
-    def __init__(self, label_name: str, depth: int, is_caller: bool):
+    def __init__(self, label_name: str, depth: int, is_caller: bool, blacklist: list, hard_blacklist: list, limit: int):
         super().__init__()
         self._cur_func = None
         self._is_caller = is_caller
         self._skip_update = False
+        self._limit = limit
+        self._blacklisted = blacklist
+        self._hard_blacklist = hard_blacklist
 
         # Creates treeview for all the function calls
         self._treeview = QTreeView()
@@ -247,23 +256,45 @@ class CallTreeLayout(QVBoxLayout):
         self._skip_update = False
         self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
+    def filter_blacklisted(self, flist):
+        return list(filter(lambda x: x.name not in self._blacklisted, flist))
+
+    def is_blacklisted(self, fname):
+        for p in self._blacklisted:
+            if re.search(p, fname):
+                return True
+        return False
+
+    def is_hard_blacklisted(self, fname):
+        for p in self._hard_blacklist:
+            if re.search(p, fname):
+                return True
+        return False
     def set_func_calls(self, cur_func, cur_std_item, is_caller: bool, depth=0):
         if is_caller:
             cur_func_calls = list(set(cur_func.callers))
         else:
             cur_func_calls = list(set(cur_func.callees))
 
-        if depth < self._func_depth:
-            if cur_func_calls:
-                for cur_func_call in cur_func_calls:
-                    new_std_item = BNFuncItem(self._binary_view, cur_func_call)
-                    cur_std_item.appendRow(new_std_item)
+        if not self.is_hard_blacklisted(cur_func.name):
+            if depth < self._func_depth:
+                if cur_func_calls:
+                    count = 0
+                    for cur_func_call in cur_func_calls:
+                        new_std_item = BNFuncItem(self._binary_view, cur_func_call)
+                        cur_std_item.appendRow(new_std_item)
 
-                    # Dont search on function that calls itself
-                    if cur_func != cur_func_call:
-                        self.set_func_calls(
-                            cur_func_call, new_std_item, is_caller, depth + 1
-                        )
+                        if count > self._limit:
+                            print("[*] Subtree limit reached for {}".format(cur_func.name))
+                            break
+                        if self.is_blacklisted(cur_func_call.name):
+                            continue
+                        # Dont search on function that calls itself
+                        if cur_func != cur_func_call:
+                            self.set_func_calls(
+                                cur_func_call, new_std_item, is_caller, depth + 1
+                            )
+                            count += 1
 
     def update_widget(self, cur_func: Function):
         # Clear previous calls
@@ -279,13 +310,21 @@ class CallTreeLayout(QVBoxLayout):
 
         root_std_items = []
 
-        # Set root std Items
-        if cur_func_calls:
-            for cur_func_call in cur_func_calls:
-                root_std_items.append(BNFuncItem(self._binary_view, cur_func_call))
-                cur_std_item = root_std_items[-1]
-                if cur_func != cur_func_call:
-                    self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
+        if not self.is_hard_blacklisted(cur_func.name):
+            # Set root std Items
+            if cur_func_calls:
+                count = 0
+                for cur_func_call in cur_func_calls:
+                    root_std_items.append(BNFuncItem(self._binary_view, cur_func_call))
+                    cur_std_item = root_std_items[-1]
+                    if count > self._limit:
+                        print("[*] Calltree items limit reached for {}".format(cur_func.name))
+                        break
+                    if self.is_blacklisted(cur_func_call.name):
+                        continue
+                    if cur_func != cur_func_call:
+                        self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
+                        count += 1
 
         call_root_node.appendRows(root_std_items)
         self.expand_all()
