@@ -10,6 +10,7 @@ Generates call tree. Alternative view for callgraph.
 
 ## Releases
 
+* 2.1 -- Bug Fix
 * 2.0 -- Multiview Support
 * 1.2 -- Bug Fixes
 * 1.1 -- Refactoring
@@ -79,3 +80,4 @@ Thanks everyone that have contributed to calltree!
 * galenbwill
 * droogie
 * bambu
+* crimsonskylark
