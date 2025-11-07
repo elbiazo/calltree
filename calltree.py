@@ -3,6 +3,7 @@ from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
     QStandardItem,
+    QBrush,
 )
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QTreeView
@@ -14,11 +15,13 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTextEdit,
     QWidget,
-    QTabWidget,
 )
 from binaryninja.settings import Settings
 
-from binaryninja import BinaryView, Function
+from binaryninja import BinaryView, Function, ThemeColor
+from binaryninja.enums import SymbolType
+from binaryninjaui import getThemeColor
+
 
 from .demangle import demangle_name
 
@@ -49,6 +52,12 @@ class CalltreeWidget(QWidget):
 class BNFuncItem(QStandardItem):
     def __init__(self, bv: BinaryView, func: Function):
         super().__init__()
+
+        if func.symbol.type == SymbolType.FunctionSymbol:
+            self.setForeground(QBrush(getThemeColor(ThemeColor.CodeSymbolColor)))
+        else:
+            self.setForeground(QBrush(getThemeColor(ThemeColor.ImportColor)))
+
         self.func = func
         self.bv = bv
         self.setText(demangle_name(self.bv, func.name))
@@ -268,7 +277,7 @@ class CallTreeLayout(QVBoxLayout):
     def update_widget(self, cur_func: Function):
         if not self.treeview.isVisible():
             return
-        
+
         # Clear previous calls
         self.clear()
         call_root_node = self.model.invisibleRootItem()
