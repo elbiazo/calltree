@@ -10,7 +10,7 @@ Generates call tree. Alternative view for callgraph.
 
 ## Releases
 
-* 3.0 -- Graph-backed call data + Python API (`networkx`)
+* 3.0 -- Graph-backed call data + Python API (`networkx`), optimization, better search, big-binary support, call-graph export, recursion markers, colored/clickable graph nodes.
 * 2.1 -- Bug Fix
 * 2.0 -- Multiview Support
 * 1.2 -- Bug Fixes
@@ -34,6 +34,59 @@ When working with really big binaries with alot of xrefs, you would want to chan
 ## Description
 
 Calltree is a plugin that generates call tree for a function. It is an alternative view for callgraph. It is a multiview plugin, so you can have multiple calltree views open at the same time.
+
+## Features
+
+### Call trees
+
+- **Incoming Calls** (callers) and **Outgoing Calls** (callees) panes, each rooted on
+  the current function and updated as you navigate.
+- **Lazy, bounded rendering** — trees load on demand and auto-expand only to a
+  configurable depth, so even large binaries stay responsive; deeper levels load as you
+  expand them.
+- **Recursion marker** — a call back into an ancestor (e.g. `_ping → _pong → _ping`) is
+  shown as a leaf with a recursion icon, so cycles are obvious and never expand forever.
+- **Clickable "… N more"** — when a function has more children than the display cap, a
+  "… N more" row loads all the remaining children on click.
+- **Manual deep-expand** — clicking a node's expand arrow drills one level deeper even
+  past the auto-expand depth, so you can follow a single path arbitrarily deep without
+  expanding the whole tree.
+- **Horizontal scrolling** with full, un-elided names.
+
+### Toolbar (per pane)
+
+Layout: `[search] [x of y] [🔍] [↑ prev] [↓ next] | [depth] [⊞ expand-all] [⊟ collapse]`
+
+- **Search** — press Enter or the 🔍 button to search the **entire** call subtree by
+  name (ignoring the depth / node caps). The tree is pruned to just the paths leading to
+  matches, each branch **ending at its match**, with matches shown in **bold**.
+- **Match counter & navigation** — an `x of y` counter (shown only while searching) plus
+  **↑ prev / ↓ next** buttons cycle through matches, centering each in view; "No matches"
+  is shown when nothing matches.
+- **Depth** — the spinbox sets how many levels auto-expand on navigation.
+- **Expand-all / Collapse** — `⊞` reveals the entire reachable subtree; `⊟` collapses it.
+
+### Call graph export
+
+- The **graph** button (on the current-function row, arranged as `[graph] | [pin]
+  [close]`) opens a Binary Ninja flow graph of exactly what the two panes currently show.
+- Nodes are **color-coded** — root (orange), incoming callers (blue), outgoing callees
+  (green) — and **clickable**: double-click a node to navigate to that function. To
+  narrow the graph, search or expand the trees first, then open it.
+
+### Navigation & tabs
+
+- **Single click** previews (navigates the disassembly without re-rooting the Current
+  tab); **double click** commits (navigates *and* re-roots the Current tab).
+- **Pin** the current call tree into a new tab to keep a snapshot while you keep
+  navigating; remove a pinned tab with the close button.
+
+### Settings
+
+- Initial incoming/outgoing depth, max auto-expanded nodes, and pinned-tab name length
+  are all configurable under the `Calltree` settings group.
+
+## Screenshots
 
 ### Default View
 

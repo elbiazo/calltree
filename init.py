@@ -5,24 +5,12 @@ from binaryninjaui import (
     SidebarWidgetType,
     Sidebar,
 )
-from PySide6.QtCore import Qt, QSize, QPoint
 from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
     QTabWidget,
-    QPushButton,
-    QHBoxLayout,
 )
-from PySide6.QtGui import (
-    QImage,
-    QIcon,
-    QPixmap,
-    QPainter,
-    QPen,
-    QPolygon,
-    QColor,
-    QPalette,
-)
+from PySide6.QtGui import QImage
 
 from .calltree import CalltreeWidget
 from binaryninja.settings import Settings
@@ -33,6 +21,9 @@ from binaryninja import (
 )
 from .demangle import demangle_name
 from .callgraph import get_call_graph, peek_call_graph
+from binaryninja.flowgraph import FlowGraph, FlowGraphNode
+from binaryninja.enums import BranchType, InstructionTextTokenType, HighlightStandardColor
+from binaryninja.function import DisassemblyTextLine, InstructionTextToken
 
 Settings().register_group("calltree", "Calltree")
 Settings().register_setting(
@@ -41,7 +32,7 @@ Settings().register_setting(
     {
         "title" : "Initial Function Incoming Depth",
         "type" : "number",
-        "default" : 5,
+        "default" : 10,
         "description" : "Initial Function Incoming Depth",
         "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
     }
@@ -53,7 +44,7 @@ Settings().register_setting(
     {
         "title" : "Initial Function Outgoing Depth",
         "type" : "number",
-        "default" : 5,
+        "default" : 10,
         "description" : "Initial Function Outgoing Depth",
         "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
     }
@@ -87,27 +78,19 @@ Settings().register_setting(
 )
 
 
-def _button_icon(kind: str, color: QColor, size: int = 16) -> QIcon:
-    """Draw a small, theme-colored toolbar icon at runtime.
+def _widget_alive(widget) -> bool:
+    """True if the Qt C++ object behind ``widget`` still exists.
 
-    Avoids shipping separate image assets and works regardless of the platform's
-    icon theme. ``kind`` is either "pin" or "remove".
-    """
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(color, 2))
-    if kind == "pin":
-        painter.setBrush(color)
-        # A thumbtack: a domed head above a centered downward spike.
-        painter.drawEllipse(3, 1, 10, 5)
-        painter.drawPolygon(QPolygon([QPoint(6, 5), QPoint(10, 5), QPoint(8, 15)]))
-    else:  # "remove": an X
-        painter.drawLine(4, 4, size - 4, size - 4)
-        painter.drawLine(size - 4, 4, 4, size - 4)
-    painter.end()
-    return QIcon(pixmap)
+    Deferred callbacks (e.g. analysis-completion events hopped to the main thread) can
+    fire after Binary Ninja has torn the sidebar down, leaving the Python wrapper
+    pointing at a freed C++ object. Callers still guard the actual Qt access, but this
+    lets them bail early and skip wasted work / re-arming."""
+    try:
+        import shiboken6
+
+        return shiboken6.isValid(widget)
+    except Exception:
+        return True  # can't tell -> assume alive; the Qt access is still guarded
 
 
 class _CalltreeFunctionNotification(BinaryDataNotification):
@@ -161,28 +144,10 @@ class CalltreeSidebarWidget(SidebarWidget):
 
         calltree_layout = QVBoxLayout()
 
-        # Toolbar: pin the current tab / remove the active pinned tab.
-        calltree_options = QHBoxLayout()
-        btn_size = QSize(50, 25)
-        icon_color = self.palette().color(QPalette.ButtonText)
-
-        self.pin_tab_button = QPushButton()
-        self.pin_tab_button.setIcon(_button_icon("pin", icon_color))
-        self.pin_tab_button.setToolTip("Pin the current call tree in a new tab")
-        self.pin_tab_button.setFixedSize(btn_size)
-        self.pin_tab_button.clicked.connect(self.pin_current_tab)
-
-        self.remove_current_tab_button = QPushButton()
-        self.remove_current_tab_button.setIcon(_button_icon("remove", icon_color))
-        self.remove_current_tab_button.setToolTip("Remove the active pinned tab")
-        self.remove_current_tab_button.setFixedSize(btn_size)
-        self.remove_current_tab_button.clicked.connect(self.remove_current_tab)
-
-        calltree_options.addStretch()
-        calltree_options.addWidget(self.pin_tab_button)
-        calltree_options.addWidget(self.remove_current_tab_button)
-
         self.calltree_tab = QTabWidget()
+        # Make the "Current" / pinned tabs a bit bigger (taller + wider) than the
+        # compact default.
+        self.calltree_tab.setStyleSheet("QTabBar::tab { padding: 6px 12px; }")
         self.current_calltree = CalltreeWidget(sidebar=self)
         self.calltree_tab.addTab(self.current_calltree, "Current")
         # The Current tab is not refreshed while it is hidden (e.g. a pinned tab is
@@ -190,7 +155,6 @@ class CalltreeSidebarWidget(SidebarWidget):
         # navigation that happened meanwhile.
         self.calltree_tab.currentChanged.connect(self._on_tab_changed)
 
-        calltree_layout.addLayout(calltree_options)
         calltree_layout.addWidget(self.calltree_tab)
         calltree_layout.setContentsMargins(0, 0, 0, 0)
         calltree_layout.setSpacing(0)
@@ -202,10 +166,78 @@ class CalltreeSidebarWidget(SidebarWidget):
         if cur_tab_index != 0:
             self.calltree_tab.removeTab(cur_tab_index)
 
+    def create_call_graph(self):
+        """Open a Binary Ninja FlowGraph of every function currently shown in the
+        active tab's incoming + outgoing trees, wired by their call relationships.
+
+        Nodes are color-coded (root / incoming caller / outgoing callee) and clickable:
+        each node carries a code-symbol token at the function's address, so
+        double-clicking it navigates the view there."""
+        bv = self.binary_view
+        widget = self.calltree_tab.currentWidget()
+        if bv is None or widget is None:
+            return
+
+        root_func = widget.in_calltree.cur_func
+        in_edges = widget.in_calltree.collect_edges()
+        out_edges = widget.out_calltree.collect_edges()
+
+        # Gather nodes + categorize each function: root wins, else incoming vs outgoing
+        # (a function in both, e.g. via a cycle, keeps its first-seen incoming tag).
+        edge_set = set()
+        funcs = {}
+        category = {}
+        for edges, cat in ((in_edges, "in"), (out_edges, "out")):
+            for caller, callee in edges:
+                edge_set.add((caller.start, callee.start))
+                for f in (caller, callee):
+                    funcs.setdefault(f.start, f)
+                    category.setdefault(f.start, cat)
+        if root_func is not None:  # include the root even if isolated
+            funcs.setdefault(root_func.start, root_func)
+            category[root_func.start] = "root"
+
+        if not funcs:
+            return
+
+        names = {
+            addr: demangle_name(bv, f.name) or f.name or f"sub_{addr:x}"
+            for addr, f in funcs.items()
+        }
+
+        colors = {
+            "root": HighlightStandardColor.OrangeHighlightColor,
+            "in": HighlightStandardColor.BlueHighlightColor,
+            "out": HighlightStandardColor.GreenHighlightColor,
+        }
+
+        graph = FlowGraph()
+        nodes = {}
+        for addr, func in funcs.items():
+            node = FlowGraphNode(graph)
+            # A code-symbol token carrying the address makes the node navigable
+            # (double-click jumps the view to the function).
+            token = InstructionTextToken(
+                InstructionTextTokenType.CodeSymbolToken, names[addr], addr
+            )
+            node.lines = [DisassemblyTextLine([token], addr)]
+            node.highlight = colors[category.get(addr, "out")]
+            graph.append(node)
+            nodes[addr] = node
+        for caller_addr, callee_addr in edge_set:
+            nodes[caller_addr].add_outgoing_edge(
+                BranchType.UnconditionalBranch, nodes[callee_addr]
+            )
+
+        title = "Calltree"
+        if root_func is not None:
+            title = f"Calltree: {demangle_name(bv, root_func.name) or root_func.name}"
+        bv.show_graph_report(title, graph)
+
     def pin_current_tab(self):
         if self.cur_func is not None:
             pinned_calltree = CalltreeWidget(sidebar=self)
-            cur_func_name = self.current_calltree.cur_func_text.toPlainText()
+            cur_func_name = self.current_calltree.cur_func_text.text()
             pinned_calltree.cur_func_text.setText(cur_func_name)
 
             # TODO: find a way to do deepcopy instead of updating widget everytime
@@ -353,8 +385,11 @@ class CalltreeSidebarWidget(SidebarWidget):
         execute_on_main_thread(lambda: self._refresh_after_analysis(bv))
 
     def _refresh_after_analysis(self, bv):
-        if self.binary_view is not bv:
-            return  # a different view is active now; ignore this stale completion
+        # This deferred callback can fire after the sidebar widget has been destroyed
+        # (view/tab closed). Bail if our C++ widget is gone so we don't touch freed Qt
+        # objects, and don't re-arm — otherwise the completion event keeps firing.
+        if not _widget_alive(self) or self.binary_view is not bv:
+            return  # different view active now, or widget gone: ignore this completion
         try:
             cg = get_call_graph(bv)
         except ImportError:
@@ -365,8 +400,11 @@ class CalltreeSidebarWidget(SidebarWidget):
         if self.cur_func is not None:
             cg.mark_dirty(self.cur_func.start)
         cg.apply_dirty()
-        if self.cur_func is not None:
-            self.set_current_function(self.cur_func)
+        try:
+            if self.cur_func is not None:
+                self.set_current_function(self.cur_func)
+        except RuntimeError:
+            return  # widget destroyed after the alive-check; stop and don't re-arm
         self._arm_analysis_event(bv)
 
 

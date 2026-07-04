@@ -154,30 +154,49 @@ cg.shortest_path("main", "malloc")
 
 ```
 CalltreeSidebarWidget (init.py)                 ← Binary Ninja SidebarWidget
-├── toolbar: [pin] [remove]
 └── QTabWidget
     ├── "Current"  → CalltreeWidget             ← tracks the active function
     └── "<pinned>" → CalltreeWidget (snapshots) ← frozen at pin time
 
 CalltreeWidget (calltree.py)                    ← one tab
-├── CurrentFunctionNameLayout   (the function header)
+├── CurrentFunctionNameLayout   [function name ······ [graph] | [pin] [close]]
 ├── CallTreeLayout  is_caller=True   ("Incoming Calls")
 └── CallTreeLayout  is_caller=False  ("Outgoing Calls")
 
 CallTreeLayout (calltree.py)                    ← one tree
 ├── QTreeView ── QSortFilterProxyModel ── QStandardItemModel
 │     (horizontal scrolling: content-sized column, no text elision)
-└── CallTreeUtilLayout: [search box] [🔍 search] [⊞ expand] [⊟ collapse] [depth]
+└── CallTreeUtilLayout:
+      [search box] [x of y] [🔍] [↑ prev] [↓ next]  |  [depth] [⊞ expand] [⊟ collapse]
 ```
 
 - **`BNFuncItem`** is the tree row: it holds `func`, `level` (1-based depth),
-  `loaded` (children populated?) and `expandable` (may have children?).
+  `loaded` (children populated?) and `expandable` (may have children?). A
+  **`MoreItem`** (`is_more=True`) is the clickable "… N more" overflow row; clicking
+  it loads all remaining children (see §7).
+- **`CurrentFunctionNameLayout`** is the per-tab header: the clickable function-name
+  `QTextEdit` (single click previews, double click commits) plus a right-aligned
+  toolbar `[graph] | [pin] [close]` (25×25 buttons matching the search toolbar,
+  `_add_toolbar`). The buttons drive the owning sidebar
+  (`create_call_graph` / `pin_current_tab` / `remove_current_tab`).
 - **`CallTreeUtilLayout`** wires the toolbar controls to `CallTreeLayout`. The
-  search / expand / collapse buttons use small QPainter-drawn, theme-colored icons
-  (`_search_icon` magnifier, `_pm_icon` plus/minus box); the tree enables full
-  horizontal scrolling via an `Interactive` column that is sized explicitly with
-  `_fit_column` (`resizeColumnToContents` + a high `resizeContentsPrecision`),
+  search / prev / next / expand / collapse buttons use small QPainter-drawn,
+  theme-colored icons (`_search_icon` magnifier, `_arrow_icon` up/down,
+  `_pm_icon` plus/minus box); the prev/next arrows cycle through the search matches
+  (see §8). A `match_label` ("`x of y`") sits right of the search box as a persistent,
+  min-width slot showing the current/total match count. The `QFrame` separator has
+  spacing on both sides. The tree enables full horizontal scrolling via an
+  `Interactive` column that is sized explicitly with `_fit_column`
+  (`resizeColumnToContents` + a high `resizeContentsPrecision`),
   `stretchLastSection=False`, `ScrollPerPixel`, and `ElideNone`.
+- **Recursion icon.** A node that repeats an ancestor on its path (a cycle, e.g.
+  `_ping → _pong → _ping`) is a non-expandable leaf marked with a QPainter-drawn
+  circular-arrow icon (`_recursion_icon`, cached per layout as `_recursion_qicon`).
+- **Graph button** (on the current-function row, `_button_icon("graph")` in
+  calltree.py): `create_call_graph` builds a Binary Ninja `FlowGraph` of the functions
+  currently shown in the active tab's two trees (color-coded, clickable) and opens it
+  with `bv.show_graph_report`. Nodes/edges come from `CallTreeLayout.collect_edges`
+  (see §9a).
 
 ---
 
@@ -241,25 +260,36 @@ loads on demand.
 
 ### Building a level
 
-`_add_children(graph, parent_item, parent_func, parent_level, path)`:
+`_add_children(graph, parent_item, parent_func, parent_level, path, start=0, limit=None)`:
 
 1. `graph.expand(parent_func, direction, max_depth=1)` — pull just this node's
    direct neighbors.
-2. Create a `BNFuncItem` per neighbor (capped at `MAX_CHILDREN_PER_NODE`; the
-   overflow becomes a non-expandable "… N more" row).
-3. A child gets an **expand placeholder** (a dummy child → the disclosure arrow) iff
-   it *can* have visible children: `child_level < func_depth + 1`, it is not already
-   on the root→node path (**cycle guard**), and `_has_neighbors` is true.
+2. Create a `BNFuncItem` per neighbor over the slice `[start : start+limit]` (`limit`
+   defaults to `MAX_CHILDREN_PER_NODE`); when more remain, append a clickable
+   **`MoreItem`** ("… N more") carrying the paging context.
+3. A neighbor that repeats an ancestor (`neighbor.start in path`) is a **cycle leaf**:
+   it gets the **recursion icon** and no placeholder.
+4. Otherwise, if `_has_neighbors` is true, the child gets an **expand placeholder** (a
+   dummy child → the disclosure arrow). **This is independent of `func_depth`** — a
+   node at *any* depth that has neighbors keeps its arrow, so the user can always drill
+   one level deeper than the auto-expanded depth. The depth cap only bounds
+   *auto*-expansion (see below), not manual expansion.
 
 `_has_neighbors(graph, func)` prefers the graph when the node is already expanded
 (avoids a BN read), else falls back to `func.callees/callers`.
+
+**Clickable "… N more".** Clicking a `MoreItem` is intercepted in
+`goto_first_func_use` → `_load_more`, which removes the marker and calls
+`_add_children(..., start=shown, limit=None)` to append **all** remaining neighbors
+under the same parent.
 
 ### Expanding on demand
 
 - The tree connects `QTreeView.expanded → _on_item_expanded → _ensure_children`.
 - `_ensure_children(item)` (idempotent via `item.loaded`, gated by
   `item.expandable`) drops the placeholder and calls `_add_children` for the real
-  children.
+  children. Because expandability is depth-independent, expanding a "maxed-out" node
+  (one deeper than the auto-expanded depth) simply loads **one more level** each click.
 - The cycle path is recomputed by walking parent items (`_path_for`).
 
 ### Auto-reveal on navigation
@@ -267,13 +297,29 @@ loads on demand.
 `_auto_reveal(budget)` makes navigation *look* expanded without exploding:
 
 1. **Load** breadth-first until `budget` nodes exist (`budget` = the
-   `calltree.max_nodes` setting; the tree structure itself stops at `func_depth`).
+   `calltree.max_nodes` setting), **skipping any row with `level > func_depth`** so
+   auto-expansion stops at the requested depth (deeper rows keep their arrow for manual
+   drill-down).
 2. **Then** `_expand_loaded_rows()` expands the loaded rows.
 
 Loading and expanding are **separate passes** on purpose: expanding only after the
 model has stopped changing prevents later inserts from resetting earlier
 expansions. Rows that still hold a placeholder (unloaded, beyond the budget) stay
 collapsed, so no blank placeholder rows are ever shown.
+
+**Empty states.** `update_widget` shows a single info row instead of a blank pane:
+`"Depth is 0"` when `func_depth <= 0` (so the pane — and an exported graph built from
+it — is deliberately empty), or `"No functions"` when the function has no
+callers/callees in this direction. `_on_full_tree` (expand-all) likewise shows
+`"No functions"` for an empty subtree. These info rows are plain `QStandardItem`s (no
+`func`), so search, lazy expansion and `collect_edges` all skip them.
+
+**Crash safety (`_build_gen`).** `clear()`/`_reset_model()` bump a `_build_gen`
+counter. `_auto_reveal` / `_expand_loaded_rows` capture it and, on each iteration,
+bail if it changed — a re-entrant navigation or search can rebuild the model
+mid-traversal, deleting the very `QStandardItem`s these loops hold. The loops also
+catch `RuntimeError` ("Internal C++ object already deleted") as a backstop, so a stale
+traversal stops cleanly instead of crashing.
 
 ### Micro-optimizations
 
@@ -297,21 +343,37 @@ Flow:
 2. The worker walks the whole subtree (`gather_subtree`, no cap), demangles every
    name, finds matches, computes **keep = matches ∪ all ancestors that can reach a
    match** (reverse BFS), and prunes the tree to those nodes — returning a pre-order
-   `(func, name, is_match, level)` list.
+   `(func, name, is_match, level, is_recursive)` list. **Each branch ends at its
+   matched function** (the DFS does not descend past a match), so a match is always a
+   leaf of its path. `is_recursive` marks cycle leaves (a node repeating an ancestor),
+   which `_on_search_tree`/`_on_full_tree` render with the recursion icon.
 3. On the main thread, `_on_search_tree` rebuilds the pruned tree (matches in
    **bold**) using a parent-stack reconstruction from the flat rows, then
    `expandAll()`.
 
 Notes:
 
-- Branches that don't lead to a match are **pruned away**; matches are shown in
-  their call-path context (not a flat list).
+- Branches that don't lead to a match are **pruned away**; each shown branch is the
+  call path from the root down to a match, **ending at that match** (a match nested
+  under a shallower match on the same branch is therefore not shown).
 - The worker DFS and the main-thread reconstruction are **iterative** (no Python
   recursion-limit issues on deep chains); cycles are shown once and not recursed.
 - A `_search_token` invalidates stale/superseded searches; navigation and the `+`
   button exit search mode.
 - `SEARCH_TREE_NODES` is only a **render** safety cap — the search *walk* itself is
   unbounded.
+- The match rows are collected (in reading order) into `_match_items` during the
+  build; the toolbar's **↑ prev / ↓ next** buttons (`prev_match`/`next_match`) cycle
+  through them with wrap-around, selecting + scrolling to each (`_select_match` →
+  deferred `_center_current_match` via `QTimer.singleShot(0)` so centering runs
+  after layout settles) without navigating the disassembly. Centering fixes both
+  axes: `scrollTo(PositionAtCenter)` centers vertically, then the horizontal scrollbar
+  is set explicitly to center the match's left edge (otherwise a deeply-indented match
+  jams to the far-right edge on wide trees). The first match is auto-selected when the
+  search completes, and a **"cur of total"** counter (`CallTreeUtilLayout.match_label`,
+  right of the search box) tracks the position.
+- **No matches** (`found=False` *or* zero result rows, e.g. only the root matched) show
+  a single "No matches" row rather than a stray/blank tree.
 
 ---
 
@@ -327,6 +389,34 @@ Notes:
 
 This makes `+` distinct from navigation: navigation is depth-limited, `+` is
 "show everything".
+
+---
+
+## 9a. Call-graph export (`graph` button)
+
+The **graph** button (`create_call_graph` in init.py) — on the current-function row,
+right-aligned as `[graph] | [pin] [close]` — opens a Binary Ninja **FlowGraph** of the
+functions currently shown in the active tab's two trees:
+
+1. `CallTreeLayout.collect_edges()` walks its `QStandardItemModel` and yields directed
+   `(caller_func, callee_func)` pairs — outgoing tree: `parent → child`; incoming
+   tree: `child → parent`; the top-level parent is `cur_func`. Placeholder / `MoreItem`
+   rows (no `func`) are skipped.
+2. `create_call_graph` unions the edges from both trees and dedupes nodes by start
+   address (including the root even if isolated). Each function becomes one
+   `FlowGraphNode`:
+   - **Color-coded** via `node.highlight`: root = orange, incoming callers = blue,
+     outgoing callees = green (root wins; a node in both cones keeps its incoming tag).
+   - **Clickable**: the node's line is a `DisassemblyTextLine` holding a
+     `CodeSymbolToken` at the function's address, so double-clicking the node navigates
+     the view there.
+   Edges are added as `UnconditionalBranch`, then `bv.show_graph_report("Calltree:
+   <root>", graph)` opens it.
+
+Because it reads the already-built model, the graph reflects exactly what the two panes
+currently show (whatever the user has expanded / searched / loaded) — no extra graph
+walk and no separate filtering step. To narrow the graph, narrow the trees first (e.g.
+via the tree search, which prunes each pane to the matched paths) and then open it.
 
 ---
 

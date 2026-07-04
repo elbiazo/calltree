@@ -9,8 +9,9 @@ from PySide6.QtGui import (
     QPen,
     QColor,
     QPalette,
+    QPolygon,
 )
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QTimer, QPoint
 from PySide6.QtWidgets import QTreeView
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -18,10 +19,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QSpinBox,
-    QTextEdit,
     QWidget,
     QHeaderView,
     QAbstractItemView,
+    QFrame,
+    QLabel,
 )
 from binaryninja.settings import Settings
 
@@ -78,6 +80,71 @@ def _pm_icon(color: QColor, plus: bool, size: int = 16) -> QIcon:
     return QIcon(pixmap)
 
 
+def _arrow_icon(color: QColor, up: bool, size: int = 16) -> QIcon:
+    """Draw an up (prev) or down (next) arrow icon."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(color, 2))
+    painter.drawLine(8, 4, 8, 12)  # shaft
+    if up:
+        painter.drawLine(5, 7, 8, 4)
+        painter.drawLine(8, 4, 11, 7)
+    else:
+        painter.drawLine(5, 9, 8, 12)
+        painter.drawLine(8, 12, 11, 9)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _recursion_icon(color: QColor, size: int = 16) -> QIcon:
+    """Draw a circular-arrow icon marking a recursive (cycle) call."""
+    from PySide6.QtCore import QRectF
+
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(color, 2))
+    painter.setBrush(Qt.NoBrush)
+    # ~300-degree arc leaving a gap, plus an arrowhead at the gap.
+    painter.drawArc(QRectF(3, 3, 10, 10), 60 * 16, 300 * 16)
+    painter.setBrush(color)
+    painter.drawPolygon(QPolygon([QPoint(11, 2), QPoint(14, 6), QPoint(9, 6)]))
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _button_icon(kind: str, color: QColor, size: int = 16) -> QIcon:
+    """Draw a small, theme-colored toolbar icon at runtime (``kind`` is "pin",
+    "remove" or "graph"). Shared by the current-function toolbar (here) and imported
+    by init.py."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(color, 2))
+    if kind == "pin":
+        painter.setBrush(color)
+        # A thumbtack: a domed head above a centered downward spike.
+        painter.drawEllipse(3, 1, 10, 5)
+        painter.drawPolygon(QPolygon([QPoint(6, 5), QPoint(10, 5), QPoint(8, 15)]))
+    elif kind == "graph":
+        # Three nodes joined by edges (a mini call graph).
+        top, left, right = QPoint(8, 3), QPoint(3, 13), QPoint(13, 13)
+        painter.drawLine(top, left)
+        painter.drawLine(top, right)
+        painter.setBrush(color)
+        for center in (top, left, right):
+            painter.drawEllipse(center, 2, 2)
+    else:  # "remove": an X
+        painter.drawLine(4, 4, size - 4, size - 4)
+        painter.drawLine(size - 4, 4, 4, size - 4)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class _FnTask(BackgroundTaskThread):
     """Run a plain callable on a Binary Ninja worker thread (keeps the UI free
     during the compute-heavy call-graph walk)."""
@@ -99,12 +166,14 @@ def _run_in_background(title, fn):
 
 def _collect_tree_rows(bv, root_func, is_caller, budget, needle=None):
     """Walk the whole subtree (BN reads only) and return pre-order rows
-    ``(func, name, is_match, level)`` for a tree bounded by ``budget``.
+    ``(func, name, is_match, level, is_recursive)`` for a tree bounded by ``budget``.
 
     With ``needle`` the tree is pruned to the paths leading to name matches
     (``is_match`` marks them) and ``found`` is False when nothing matches. With
     ``needle=None`` the full reachable tree is returned (``found`` always True).
-    Touches only Binary Ninja reads, so it is safe to run off the main thread.
+    ``is_recursive`` marks a node that repeats an ancestor on its path (a cycle
+    leaf, e.g. A -> B -> A). Touches only Binary Ninja reads, so it is safe to run
+    off the main thread.
     """
     try:
         edges, _ = gather_subtree(root_func, is_caller, 10 ** 9, None)
@@ -160,11 +229,21 @@ def _collect_tree_rows(bv, root_func, is_caller, budget, needle=None):
             dfs.pop()
             path_set.discard(node_addr)
             continue
+        is_recursive = child.start in path_set
         rows.append(
-            (child, names.get(child.start, ""), child.start in matches, len(dfs))
+            (
+                child,
+                names.get(child.start, ""),
+                child.start in matches,
+                len(dfs),
+                is_recursive,
+            )
         )
         remaining -= 1
-        if child.start not in path_set:
+        # For a search, each branch ends at the matched function: don't descend past
+        # a match. (needle is None => the full "expand all" tree, always descend.)
+        ends_here = needle is not None and child.start in matches
+        if not ends_here and not is_recursive:
             path_set.add(child.start)
             dfs.append([iter(adj.get(child.start, ())), child.start])
     return rows, True
@@ -215,6 +294,23 @@ class BNFuncItem(QStandardItem):
         self.setEditable(False)
 
 
+class MoreItem(QStandardItem):
+    """The clickable "… N more" overflow row under a node whose child count exceeds
+    ``MAX_CHILDREN_PER_NODE``. Clicking it loads all remaining children (see
+    ``CallTreeLayout._load_more``)."""
+
+    is_more = True
+
+    def __init__(self, count, parent_item, parent_func, parent_level, path, shown):
+        super().__init__(f"… {count} more")
+        self.setEditable(False)
+        self.parent_item = parent_item
+        self.parent_func = parent_func
+        self.parent_level = parent_level
+        self.path = path
+        self.shown = shown
+
+
 class CurrentFunctionNameLayout(QHBoxLayout):
     """Header showing the pane's root function. Clicking mirrors the call trees: a
     single click previews (navigate the main view without re-rooting the Current
@@ -224,20 +320,63 @@ class CurrentFunctionNameLayout(QHBoxLayout):
         super().__init__()
         self.sidebar = sidebar
         self.binary_view = None
-        self.cur_func_text = QTextEdit()
+        # A read-only QLineEdit (same widget/height as the search box) so the
+        # current-function row matches the search toolbar row exactly.
+        self.cur_func_text = QLineEdit()
         self.cur_func_text.setReadOnly(True)
-        self.cur_func_text.setMaximumHeight(30)
-        self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
+        self.cur_func_text.setAlignment(Qt.AlignLeft)
         self.cur_func_text.mousePressEvent = self.preview_func
         self.cur_func_text.mouseDoubleClickEvent = self.goto_func
-        super().addWidget(self.cur_func_text)
+        super().addWidget(self.cur_func_text, 1)  # stretch so buttons stay right-aligned
+        self.setContentsMargins(0, 0, 0, 0)
+        self._add_toolbar()
+
+    def _add_toolbar(self):
+        """Graph / pin / close buttons on the current-function row, right-aligned and
+        styled like the per-pane search toolbar (25x25). They drive the owning
+        sidebar, so they are only added when one is present."""
+        if self.sidebar is None:
+            return
+        btn_size = QSize(25, 25)
+        icon_color = self.cur_func_text.palette().color(QPalette.ButtonText)
+
+        self.graph_button = QPushButton()
+        self.graph_button.setIcon(_button_icon("graph", icon_color))
+        self.graph_button.setToolTip(
+            "Open a call graph of the functions currently shown in both trees"
+        )
+        self.graph_button.setFixedSize(btn_size)
+        self.graph_button.clicked.connect(self.sidebar.create_call_graph)
+
+        self.pin_button = QPushButton()
+        self.pin_button.setIcon(_button_icon("pin", icon_color))
+        self.pin_button.setToolTip("Pin the current call tree in a new tab")
+        self.pin_button.setFixedSize(btn_size)
+        self.pin_button.clicked.connect(self.sidebar.pin_current_tab)
+
+        self.close_button = QPushButton()
+        self.close_button.setIcon(_button_icon("remove", icon_color))
+        self.close_button.setToolTip("Remove the active pinned tab")
+        self.close_button.setFixedSize(btn_size)
+        self.close_button.clicked.connect(self.sidebar.remove_current_tab)
+
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+
+        # [function name ........] [graph] | [pin] [close]
+        self.addWidget(self.graph_button)
+        self.addSpacing(6)
+        self.addWidget(separator)
+        self.addSpacing(6)
+        self.addWidget(self.pin_button)
+        self.addWidget(self.close_button)
 
     # TODO: really should check the address as well as name; matching on name alone can fail.
     def _lookup_func(self):
         if self.binary_view is None:
             return None
-        funcs = self.binary_view.get_functions_by_name(self.cur_func_text.toPlainText())
+        funcs = self.binary_view.get_functions_by_name(self.cur_func_text.text())
         return funcs[0] if funcs else None
 
     def preview_func(self, event):
@@ -281,6 +420,14 @@ class CallTreeUtilLayout(QHBoxLayout):
         # Search is explicit (Enter or the button), not per-keystroke.
         self.func_filter.returnPressed.connect(self.trigger_search)
 
+        # "cur of total" match counter, shown to the right of the search box only while
+        # a search is active (blank during normal browsing so an idle "0 of 0" is never
+        # mistaken for a failed search). A persistent min-width keeps the slot stable.
+        self.match_label = QLabel("")
+        self.match_label.setToolTip("Current match / total matches")
+        self.match_label.setAlignment(Qt.AlignCenter)
+        self.match_label.setMinimumWidth(52)
+
         self.search_button = QPushButton()
         self.search_button.setIcon(_search_icon(icon_color))
         self.search_button.setFixedSize(btn_size)
@@ -288,6 +435,26 @@ class CallTreeUtilLayout(QHBoxLayout):
             "Search the entire call subtree by name (ignores depth / node caps)"
         )
         self.search_button.clicked.connect(self.trigger_search)
+
+        self.prev_button = QPushButton()
+        self.prev_button.setIcon(_arrow_icon(icon_color, up=True))
+        self.prev_button.setToolTip("Previous match")
+        self.prev_button.setFixedSize(btn_size)
+        self.prev_button.clicked.connect(self.calltree.prev_match)
+
+        self.next_button = QPushButton()
+        self.next_button.setIcon(_arrow_icon(icon_color, up=False))
+        self.next_button.setToolTip("Next match")
+        self.next_button.setFixedSize(btn_size)
+        self.next_button.clicked.connect(self.calltree.next_match)
+
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+
+        self.spinbox = QSpinBox()
+        self.spinbox.valueChanged.connect(self.spinbox_changed)
+        self.spinbox.setValue(self.calltree.func_depth)
 
         self.expand_all_button = QPushButton()
         self.expand_all_button.setIcon(_pm_icon(icon_color, plus=True))
@@ -301,15 +468,23 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.collapse_all_button.setFixedSize(btn_size)
         self.collapse_all_button.clicked.connect(self.calltree.collapse_all)
 
-        self.spinbox = QSpinBox()
-        self.spinbox.valueChanged.connect(self.spinbox_changed)
-        self.spinbox.setValue(self.calltree.func_depth)
-
         super().addWidget(self.func_filter)
+        super().addWidget(self.match_label)
         super().addWidget(self.search_button)
+        super().addWidget(self.prev_button)
+        super().addWidget(self.next_button)
+        super().addSpacing(6)
+        super().addWidget(separator)
+        super().addSpacing(6)
+        super().addWidget(self.spinbox)
         super().addWidget(self.expand_all_button)
         super().addWidget(self.collapse_all_button)
-        super().addWidget(self.spinbox)
+
+    def set_match_count(self, cur, total):
+        self.match_label.setText(f"{cur} of {total}")
+
+    def clear_match_count(self):
+        self.match_label.setText("")
 
     def trigger_search(self):
         self.calltree.do_search(self.func_filter.text())
@@ -338,8 +513,14 @@ class CallTreeLayout(QVBoxLayout):
         self._search_token = 0
         self._search_text = ""
         self._suppress_fit = False
+        self._match_items = []
+        self._match_index = -1
         self._brush_func = None
         self._brush_import = None
+        self._recursion_qicon = None
+        # Bumped whenever the model is cleared/rebuilt; a running _auto_reveal captures
+        # it and bails if it changes (the items it holds have been deleted underneath).
+        self._build_gen = 0
 
         self.treeview = QTreeView()
         self.model = QStandardItemModel()
@@ -356,6 +537,7 @@ class CallTreeLayout(QVBoxLayout):
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.setResizeContentsPrecision(50000)
         self.treeview.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.treeview.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.treeview.setTextElideMode(Qt.ElideNone)
 
         # Single click jumps to the call site; double click drills into the function.
@@ -404,19 +586,25 @@ class CallTreeLayout(QVBoxLayout):
             return  # a newer search / navigation superseded this one
         self._reset_model()
         root = self.model.invisibleRootItem()
-        if not found:
+        if not found or not rows:
             self._append_info(root, "No matches")
+            self._update_match_counter()
             return
         self._ensure_brushes()
-        # Rebuild the pruned tree from the pre-order (func, name, is_match, level) rows.
+        # Rebuild the pruned tree from the pre-order (func, name, is_match, level,
+        # is_recursive) rows, collecting the match rows (in reading order) for
+        # prev/next cycling.
         parents = {0: root}
-        for func, name, is_match, level in rows:
+        for func, name, is_match, level, is_recursive in rows:
             item = BNFuncItem(func, name, self._brush_for(func), level)
             self._node_count += 1
+            if is_recursive:
+                item.setIcon(self._recursion_qicon)
             if is_match:
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
+                self._match_items.append(item)
             parents.get(level - 1, root).appendRow(item)
             parents[level] = item
         self._suppress_fit = True
@@ -425,6 +613,64 @@ class CallTreeLayout(QVBoxLayout):
         finally:
             self._suppress_fit = False
         self._fit_column()
+        if self._match_items:  # auto-select the first match
+            self._match_index = 0
+            self._select_match()
+
+    def next_match(self):
+        self._step_match(1)
+
+    def prev_match(self):
+        self._step_match(-1)
+
+    def _step_match(self, delta):
+        if not self._match_items:
+            return
+        self._match_index = (self._match_index + delta) % len(self._match_items)
+        self._select_match()
+
+    def _select_match(self):
+        # Highlight + scroll to the current match. Does not navigate the disassembly
+        # view (double-click still does that); this is pure in-tree navigation.
+        self._update_match_counter()
+        item = self._match_items[self._match_index]
+        proxy_index = self.proxy_model.mapFromSource(self.model.indexFromItem(item))
+        if not proxy_index.isValid():
+            return
+        self.treeview.setCurrentIndex(proxy_index)
+        # Defer the centering scroll: right after expandAll the view has not finished
+        # laying rows out, so an immediate scrollTo uses stale positions and the
+        # match lands off-center. Running it on the next event-loop turn centers it.
+        QTimer.singleShot(0, self._center_current_match)
+
+    def _center_current_match(self):
+        if not (0 <= self._match_index < len(self._match_items)):
+            return
+        item = self._match_items[self._match_index]
+        proxy_index = self.proxy_model.mapFromSource(self.model.indexFromItem(item))
+        if not proxy_index.isValid():
+            return
+        self.treeview.scrollTo(proxy_index, QAbstractItemView.PositionAtCenter)
+        # scrollTo centers vertically but jams a deeply-indented (far-right) match to
+        # the right edge horizontally. Re-center the match's left edge (the start of
+        # its name) in the viewport so it isn't lost off-screen on wide trees.
+        hbar = self.treeview.horizontalScrollBar()
+        rect = self.treeview.visualRect(proxy_index)
+        viewport_w = self.treeview.viewport().width()
+        item_left = rect.left() + hbar.value()  # absolute x in content coords
+        hbar.setValue(max(0, item_left - viewport_w // 2))
+
+    def _update_match_counter(self):
+        if not hasattr(self, "util"):
+            return
+        # The counter is a search indicator: only show it while a search is active, so
+        # a normal (unsearched) call tree never sits next to a misleading "0 of 0".
+        if not self._search_active:
+            self.util.clear_match_count()
+            return
+        total = len(self._match_items)
+        cur = self._match_index + 1 if total else 0
+        self.util.set_match_count(cur, total)
 
     def _show_info(self, text):
         self._reset_model()
@@ -437,9 +683,13 @@ class CallTreeLayout(QVBoxLayout):
         root.appendRow(item)
 
     def _reset_model(self):
+        self._build_gen += 1
         self.proxy_model.setFilterRegularExpression("")
         self.model.clear()
         self._node_count = 0
+        self._match_items = []
+        self._match_index = -1
+        self._update_match_counter()
         self.set_label(self.label_name)
 
     def _exit_search(self):
@@ -474,10 +724,15 @@ class CallTreeLayout(QVBoxLayout):
             self._reset_model()
             self._ensure_brushes()
             root = self.model.invisibleRootItem()
+            if not rows:  # no callers / callees in this direction
+                self._append_info(root, "No functions")
+                return
             parents = {0: root}
-            for func, name, _is_match, level in rows:
+            for func, name, _is_match, level, is_recursive in rows:
                 item = BNFuncItem(func, name, self._brush_for(func), level)
                 self._node_count += 1
+                if is_recursive:
+                    item.setIcon(self._recursion_qicon)
                 parents.get(level - 1, root).appendRow(item)
                 parents[level] = item
             self._suppress_fit = True
@@ -498,8 +753,11 @@ class CallTreeLayout(QVBoxLayout):
         re-rooting the Current tab."""
         source_index = self.proxy_model.mapToSource(index)
         item = self.model.itemFromIndex(source_index)
+        if getattr(item, "is_more", False):  # "… N more" row: load the rest
+            self._load_more(item)
+            return
         func = getattr(item, "func", None)
-        if func is None:  # a placeholder or "… N more" marker, not a function row
+        if func is None:  # a placeholder row, not a function row
             return
         bv = self.binary_view
         if bv is None:
@@ -575,6 +833,9 @@ class CallTreeLayout(QVBoxLayout):
         if self._brush_func is None:
             self._brush_func = QBrush(getThemeColor(ThemeColor.CodeSymbolColor))
             self._brush_import = QBrush(getThemeColor(ThemeColor.ImportColor))
+        if self._recursion_qicon is None:
+            color = self.treeview.palette().color(QPalette.WindowText)
+            self._recursion_qicon = _recursion_icon(color)
 
     def _brush_for(self, func):
         symbol = getattr(func, "symbol", None)
@@ -594,13 +855,6 @@ class CallTreeLayout(QVBoxLayout):
         item.setEditable(False)
         return item
 
-    @staticmethod
-    def _more_marker(count):
-        item = QStandardItem(f"… {count} more")
-        item.setEditable(False)
-        item.setSelectable(False)
-        return item
-
     def _has_neighbors(self, graph, func):
         direction = self._direction()
         # Prefer the graph when this node's neighbors are already known, to avoid a
@@ -613,12 +867,25 @@ class CallTreeLayout(QVBoxLayout):
             return False
         return any(n is not None for n in neighbors)
 
-    def _add_children(self, graph, parent_item, parent_func, parent_level, path):
+    def _add_children(
+        self,
+        graph,
+        parent_item,
+        parent_func,
+        parent_level,
+        path,
+        start=0,
+        limit=MAX_CHILDREN_PER_NODE,
+    ):
         """Add ``parent_func``'s direct neighbors under ``parent_item`` (one level).
 
-        A child that could be expanded further gets a placeholder child so its
-        expand arrow appears; the real children load lazily on expand. Children are
-        capped, with a trailing "… N more" marker when the cap is exceeded.
+        A child that can be expanded further gets a placeholder child so its expand
+        arrow appears (regardless of ``func_depth`` — the depth cap only bounds
+        *auto*-expansion, so the user can always drill one level deeper). A child that
+        repeats an ancestor (cycle, e.g. A -> B -> A) is a leaf marked with the
+        recursion icon. ``start``/``limit`` page the neighbor list (``limit=None`` loads
+        all remaining); when more remain a clickable "… N more" row is appended (see
+        _load_more).
         """
         self._ensure_brushes()
         graph.expand(parent_func, direction=self._direction(), max_depth=1)
@@ -626,20 +893,62 @@ class CallTreeLayout(QVBoxLayout):
             n for n in graph.neighbors(parent_func, self._direction()) if n is not None
         ]
         child_level = parent_level + 1
-        shown = neighbors[:MAX_CHILDREN_PER_NODE]
-        for neighbor in shown:
+        end = len(neighbors) if limit is None else start + limit
+        for neighbor in neighbors[start:end]:
             item = self._make_item(graph, neighbor, child_level)
             parent_item.appendRow(item)
-            if (
-                child_level < self.func_depth + 1
-                and neighbor.start not in path
-                and self._has_neighbors(graph, neighbor)
-            ):
+            if neighbor.start in path:
+                # Recursive call back to an ancestor: leaf marked with the icon.
+                item.setIcon(self._recursion_qicon)
+            elif self._has_neighbors(graph, neighbor):
                 item.appendRow(self._placeholder())
                 item.expandable = True
-        extra = len(neighbors) - len(shown)
-        if extra > 0:
-            parent_item.appendRow(self._more_marker(extra))
+        remaining = len(neighbors) - end
+        if remaining > 0:
+            parent_item.appendRow(
+                MoreItem(remaining, parent_item, parent_func, parent_level, path, end)
+            )
+
+    def _load_more(self, more_item):
+        """Replace a "… N more" row with all remaining children of its node."""
+        graph = self._call_graph()
+        if graph is None:
+            return
+        parent_item = more_item.parent_item
+        parent_item.removeRow(more_item.row())
+        self._add_children(
+            graph,
+            parent_item,
+            more_item.parent_func,
+            more_item.parent_level,
+            more_item.path,
+            start=more_item.shown,
+            limit=None,
+        )
+        self._fit_column()
+
+    def collect_edges(self):
+        """Directed ``(caller_func, callee_func)`` pairs for every function currently
+        shown in this tree (used to build the FlowGraph). Direction follows the pane:
+        outgoing = parent -> child, incoming = child -> parent. Placeholder / "… more"
+        rows (no ``func``) are skipped. The root function is the parent of top-level
+        rows."""
+        edges = []
+        root = self.model.invisibleRootItem()
+        stack = [root.child(row) for row in range(root.rowCount())]
+        while stack:
+            item = stack.pop()
+            if not isinstance(item, BNFuncItem):
+                continue
+            parent_item = item.parent()
+            parent_func = getattr(parent_item, "func", None) or self.cur_func
+            if parent_func is not None and item.func is not None:
+                if self.is_caller:
+                    edges.append((item.func, parent_func))
+                else:
+                    edges.append((parent_func, item.func))
+            stack.extend(item.child(row) for row in range(item.rowCount()))
+        return edges
 
     def _path_for(self, item):
         """Addresses from the root function down to ``item`` (for cycle detection)."""
@@ -684,20 +993,35 @@ class CallTreeLayout(QVBoxLayout):
     def _auto_reveal(self, budget):
         """Auto-expand the tree to ``func_depth`` levels on navigation.
 
-        Loading and expanding are two separate passes: every expandable row's
-        children are loaded first (breadth-first; ``budget`` is only a safety cap for
+        Loading and expanding are two separate passes: expandable rows up to
+        ``func_depth`` are loaded first (breadth-first; ``budget`` is a safety cap for
         pathologically dense graphs), then the loaded rows are expanded. Expanding
         only after the model has stopped changing keeps earlier expansions from being
-        reset by later inserts. The tree structure itself stops at ``func_depth``, so
-        for normal graphs this reveals exactly the requested depth.
+        reset by later inserts. Auto-expansion stops at ``func_depth``; deeper rows
+        keep their expand arrow so the user can still drill down manually.
+
+        Guarded by ``_build_gen``: if a re-entrant navigation/search rebuilds the model
+        while this runs, the items held here are deleted, so the traversal aborts
+        rather than touching a freed C++ object.
         """
+        gen = self._build_gen
         queue = [self.model.item(row) for row in range(self.model.rowCount())]
         while queue and self._node_count < budget:
+            if self._build_gen != gen:
+                return  # model was rebuilt underneath us; our items are stale
             item = queue.pop(0)
-            if not isinstance(item, BNFuncItem):
-                continue
-            self._ensure_children(item)
-            queue.extend(item.child(row) for row in range(item.rowCount()))
+            try:
+                # Load a row's children only if the row is shallower than func_depth, so
+                # the deepest auto-created level is exactly func_depth (loading a level-N
+                # row creates level N+1). Deeper rows keep their arrow for manual expand.
+                if not isinstance(item, BNFuncItem) or item.level >= self.func_depth:
+                    continue
+                self._ensure_children(item)
+                queue.extend(item.child(row) for row in range(item.rowCount()))
+            except RuntimeError:
+                return  # a held item's C++ object was deleted; stop the stale walk
+        if self._build_gen != gen:
+            return
         self._suppress_fit = True
         try:
             self._expand_loaded_rows()
@@ -708,13 +1032,19 @@ class CallTreeLayout(QVBoxLayout):
     def _expand_loaded_rows(self):
         # View-only pass: expand every row whose real children are loaded. Rows that
         # still hold a placeholder (unloaded) stay collapsed, so no blank rows show.
+        gen = self._build_gen
         stack = [self.model.item(row) for row in range(self.model.rowCount())]
         while stack:
+            if self._build_gen != gen:
+                return
             item = stack.pop()
-            if not isinstance(item, BNFuncItem) or not item.loaded:
-                continue
-            self._expand_item(item)
-            stack.extend(item.child(row) for row in range(item.rowCount()))
+            try:
+                if not isinstance(item, BNFuncItem) or not item.loaded:
+                    continue
+                self._expand_item(item)
+                stack.extend(item.child(row) for row in range(item.rowCount()))
+            except RuntimeError:
+                return
 
     def update_widget(self, cur_func: Function, force: bool = False):
         # `force` bypasses the visibility short-circuit so callers that build a
@@ -728,6 +1058,11 @@ class CallTreeLayout(QVBoxLayout):
         self.clear()
         self.cur_func = cur_func
 
+        if self.func_depth <= 0:
+            # Depth 0 = show nothing (so an exported call graph reflects an empty pane).
+            self._append_info(self.model.invisibleRootItem(), "Depth is 0")
+            return
+
         graph = self._call_graph()
         if graph is None:
             return
@@ -738,16 +1073,22 @@ class CallTreeLayout(QVBoxLayout):
 
         # Build only the first level; deeper levels load lazily as rows are expanded.
         graph.expand(cur_func, direction=self._direction(), max_depth=1)
-        self._add_children(
-            graph, self.model.invisibleRootItem(), cur_func, 0, {cur_func.start}
-        )
+        root = self.model.invisibleRootItem()
+        self._add_children(graph, root, cur_func, 0, {cur_func.start})
+        if root.rowCount() == 0:  # no callers / callees in this direction
+            self._append_info(root, "No functions")
+            return
         # Node cap is a user setting; fall back to the constant if unset/zero.
         max_nodes = Settings().get_integer("calltree.max_nodes") or AUTO_EXPAND_NODES
         self._auto_reveal(max_nodes)
 
     def clear(self):
+        self._build_gen += 1
         self.model.clear()
         self._node_count = 0
+        self._match_items = []
+        self._match_index = -1
+        self._update_match_counter()
         self.set_label(self.label_name)
 
     def set_label(self, label_name):
