@@ -166,12 +166,18 @@ CalltreeWidget (calltree.py)                    ← one tab
 
 CallTreeLayout (calltree.py)                    ← one tree
 ├── QTreeView ── QSortFilterProxyModel ── QStandardItemModel
-└── CallTreeUtilLayout: [search box] [🔍] [+] [-] [depth spinbox]
+│     (horizontal scrolling: content-sized column, no text elision)
+└── CallTreeUtilLayout: [search box] [🔍 search] [⊞ expand] [⊟ collapse] [depth]
 ```
 
 - **`BNFuncItem`** is the tree row: it holds `func`, `level` (1-based depth),
   `loaded` (children populated?) and `expandable` (may have children?).
-- **`CallTreeUtilLayout`** wires the toolbar controls to `CallTreeLayout`.
+- **`CallTreeUtilLayout`** wires the toolbar controls to `CallTreeLayout`. The
+  search / expand / collapse buttons use small QPainter-drawn, theme-colored icons
+  (`_search_icon` magnifier, `_pm_icon` plus/minus box); the tree enables full
+  horizontal scrolling via an `Interactive` column that is sized explicitly with
+  `_fit_column` (`resizeColumnToContents` + a high `resizeContentsPrecision`),
+  `stretchLastSection=False`, `ScrollPerPixel`, and `ElideNone`.
 
 ---
 

@@ -8,6 +8,7 @@ from PySide6.QtGui import (
     QPainter,
     QPen,
     QColor,
+    QPalette,
 )
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QTreeView
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTextEdit,
     QWidget,
+    QHeaderView,
+    QAbstractItemView,
 )
 from binaryninja.settings import Settings
 
@@ -45,16 +48,32 @@ EXPAND_ALL_NODES = 5000  # rows revealed by the expand-all (+) button
 SEARCH_TREE_NODES = 20000  # render safety cap on the pruned search-result call tree
 
 
-def _search_icon(size: int = 16) -> QIcon:
+def _search_icon(color: QColor, size: int = 16) -> QIcon:
     """Draw a small magnifying-glass icon for the search button."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(QColor(140, 140, 140), 2))
+    painter.setPen(QPen(color, 2))
     painter.setBrush(Qt.NoBrush)
     painter.drawEllipse(2, 2, 8, 8)  # lens
     painter.drawLine(9, 9, 14, 14)  # handle
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _pm_icon(color: QColor, plus: bool, size: int = 16) -> QIcon:
+    """Draw a plus-in-a-box (expand) or minus-in-a-box (collapse) icon."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.setPen(QPen(color, 1.5))
+    painter.setBrush(Qt.NoBrush)
+    painter.drawRoundedRect(3, 3, 10, 10, 2, 2)
+    painter.drawLine(6, 8, 10, 8)  # horizontal bar (minus / part of plus)
+    if plus:
+        painter.drawLine(8, 6, 8, 10)  # vertical bar completes the plus
     painter.end()
     return QIcon(pixmap)
 
@@ -255,6 +274,7 @@ class CallTreeUtilLayout(QHBoxLayout):
         super().__init__()
         self.calltree = calltree
         btn_size = QSize(25, 25)
+        icon_color = calltree.treeview.palette().color(QPalette.ButtonText)
 
         self.func_filter = QLineEdit()
         self.func_filter.setPlaceholderText("search all calls (Enter)")
@@ -262,18 +282,22 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.func_filter.returnPressed.connect(self.trigger_search)
 
         self.search_button = QPushButton()
-        self.search_button.setIcon(_search_icon())
+        self.search_button.setIcon(_search_icon(icon_color))
         self.search_button.setFixedSize(btn_size)
         self.search_button.setToolTip(
             "Search the entire call subtree by name (ignores depth / node caps)"
         )
         self.search_button.clicked.connect(self.trigger_search)
 
-        self.expand_all_button = QPushButton("+")
+        self.expand_all_button = QPushButton()
+        self.expand_all_button.setIcon(_pm_icon(icon_color, plus=True))
+        self.expand_all_button.setToolTip("Expand the full call subtree")
         self.expand_all_button.setFixedSize(btn_size)
         self.expand_all_button.clicked.connect(self.calltree.expand_all)
 
-        self.collapse_all_button = QPushButton("-")
+        self.collapse_all_button = QPushButton()
+        self.collapse_all_button.setIcon(_pm_icon(icon_color, plus=False))
+        self.collapse_all_button.setToolTip("Collapse all")
         self.collapse_all_button.setFixedSize(btn_size)
         self.collapse_all_button.clicked.connect(self.calltree.collapse_all)
 
@@ -313,6 +337,7 @@ class CallTreeLayout(QVBoxLayout):
         self._search_active = False
         self._search_token = 0
         self._search_text = ""
+        self._suppress_fit = False
         self._brush_func = None
         self._brush_import = None
 
@@ -322,6 +347,16 @@ class CallTreeLayout(QVBoxLayout):
         self.proxy_model.setSourceModel(self.model)
         self.treeview.setModel(self.proxy_model)
         self.treeview.setExpandsOnDoubleClick(False)
+        # Allow horizontal scrolling to the full width: an Interactive column that we
+        # size explicitly (see _fit_column). ResizeToContents only measures up to
+        # `resizeContentsPrecision` rows, so deep/wide rows past that were cut off;
+        # a high precision + an explicit resize after each build measures them all.
+        header = self.treeview.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setResizeContentsPrecision(50000)
+        self.treeview.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.treeview.setTextElideMode(Qt.ElideNone)
 
         # Single click jumps to the call site; double click drills into the function.
         self.treeview.clicked.connect(self.goto_first_func_use)
@@ -384,7 +419,12 @@ class CallTreeLayout(QVBoxLayout):
                 item.setFont(font)
             parents.get(level - 1, root).appendRow(item)
             parents[level] = item
-        self.treeview.expandAll()
+        self._suppress_fit = True
+        try:
+            self.treeview.expandAll()
+        finally:
+            self._suppress_fit = False
+        self._fit_column()
 
     def _show_info(self, text):
         self._reset_model()
@@ -440,12 +480,18 @@ class CallTreeLayout(QVBoxLayout):
                 self._node_count += 1
                 parents.get(level - 1, root).appendRow(item)
                 parents[level] = item
-            self.treeview.expandAll()
+            self._suppress_fit = True
+            try:
+                self.treeview.expandAll()
+            finally:
+                self._suppress_fit = False
+            self._fit_column()
         finally:
             self._expanding = False
 
     def collapse_all(self):
         self.treeview.collapseAll()
+        self._fit_column()
 
     def goto_first_func_use(self, index):
         """Single click: navigate to where the parent calls this function, without
@@ -622,6 +668,14 @@ class CallTreeLayout(QVBoxLayout):
     def _on_item_expanded(self, proxy_index):
         item = self.model.itemFromIndex(self.proxy_model.mapToSource(proxy_index))
         self._ensure_children(item)
+        if not self._suppress_fit:
+            self._fit_column()
+
+    def _fit_column(self):
+        # Size the (single) column to the widest laid-out row so the horizontal
+        # scrollbar reaches the full content. Suppressed during bulk expansion so it
+        # runs once at the end (not per row).
+        self.treeview.resizeColumnToContents(0)
 
     def _expand_item(self, item):
         source_index = self.model.indexFromItem(item)
@@ -644,7 +698,12 @@ class CallTreeLayout(QVBoxLayout):
                 continue
             self._ensure_children(item)
             queue.extend(item.child(row) for row in range(item.rowCount()))
-        self._expand_loaded_rows()
+        self._suppress_fit = True
+        try:
+            self._expand_loaded_rows()
+        finally:
+            self._suppress_fit = False
+        self._fit_column()
 
     def _expand_loaded_rows(self):
         # View-only pass: expand every row whose real children are loaded. Rows that
