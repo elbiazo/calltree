@@ -164,11 +164,17 @@ CalltreeWidget (calltree.py)                    ← one tab
 └── CallTreeLayout  is_caller=False  ("Outgoing Calls")
 
 CallTreeLayout (calltree.py)                    ← one tree
+├── CallTreeHeaderLayout: [<direction> Calls ······ [depth] [⊞ expand] [⊟ collapse]]
 ├── QTreeView ── QSortFilterProxyModel ── QStandardItemModel
-│     (horizontal scrolling: content-sized column, no text elision)
-└── CallTreeUtilLayout:
-      [search box] [x of y] [🔍] [↑ prev] [↓ next]  |  [depth] [⊞ expand] [⊟ collapse]
+│     (header hidden — label is in the header row; content-sized column, no elision)
+└── CallTreeUtilLayout: [search box] [x of y] [🔍] [↑ prev] [↓ next]
 ```
+
+The **`CallTreeHeaderLayout`** row carries the pane's `"<direction> Calls"` label plus
+the depth spinbox and expand/collapse controls (the tree's own column header is hidden
+via `setHeaderHidden(True)`). The **`CallTreeUtilLayout`** row below the tree keeps just
+the search box, match counter and search/prev/next. Both rows use the same 25×25 buttons
+so they are the same height.
 
 - **`BNFuncItem`** is the tree row: it holds `func`, `level` (1-based depth),
   `loaded` (children populated?) and `expandable` (may have children?). A

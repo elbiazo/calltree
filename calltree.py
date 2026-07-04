@@ -12,7 +12,7 @@ from PySide6.QtGui import (
     QPalette,
     QPolygon,
 )
-from PySide6.QtCore import QSize, Qt, QTimer, QPoint, QEvent
+from PySide6.QtCore import QSize, Qt, QTimer, QPoint
 from PySide6.QtWidgets import QTreeView
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -52,59 +52,49 @@ SEARCH_TREE_NODES = 20000  # render safety cap on the pruned search-result call 
 
 
 def _search_icon(color: QColor, size: int = 16) -> QIcon:
-    """Draw a magnifying-glass icon (proportional to ``size``)."""
+    """Draw a small magnifying-glass icon for the search button."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(color, max(2, round(size / 9))))
+    painter.setPen(QPen(color, 2))
     painter.setBrush(Qt.NoBrush)
-    lens = round(size * 0.5)
-    off = round(size * 0.13)
-    painter.drawEllipse(off, off, lens, lens)  # lens
-    painter.drawLine(
-        round(size * 0.56), round(size * 0.56), round(size * 0.9), round(size * 0.9)
-    )  # handle
+    painter.drawEllipse(2, 2, 8, 8)  # lens
+    painter.drawLine(9, 9, 14, 14)  # handle
     painter.end()
     return QIcon(pixmap)
 
 
 def _pm_icon(color: QColor, plus: bool, size: int = 16) -> QIcon:
-    """Draw a plus-in-a-box (expand) or minus-in-a-box (collapse) icon. Proportions
-    scale with ``size`` and fill the canvas so it stays crisp and legible when rendered
-    larger in the toolbar."""
+    """Draw a plus-in-a-box (expand) or minus-in-a-box (collapse) icon."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(color, max(2, round(size / 9))))
+    painter.setPen(QPen(color, 1.5))
     painter.setBrush(Qt.NoBrush)
-    m = max(1, round(size / 10))
-    painter.drawRoundedRect(m, m, size - 2 * m, size - 2 * m, size / 5, size / 5)
-    c = size / 2
-    arm = size / 4
-    painter.drawLine(round(c - arm), round(c), round(c + arm), round(c))  # minus bar
+    painter.drawRoundedRect(3, 3, 10, 10, 2, 2)
+    painter.drawLine(6, 8, 10, 8)  # horizontal bar (minus / part of plus)
     if plus:
-        painter.drawLine(round(c), round(c - arm), round(c), round(c + arm))  # + stem
+        painter.drawLine(8, 6, 8, 10)  # vertical bar completes the plus
     painter.end()
     return QIcon(pixmap)
 
 
 def _arrow_icon(color: QColor, up: bool, size: int = 16) -> QIcon:
-    """Draw an up (prev) or down (next) arrow icon (proportional to ``size``)."""
+    """Draw an up (prev) or down (next) arrow icon."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(color, max(2, round(size / 8))))
-    c = size / 2
-    painter.drawLine(round(c), round(size * 0.25), round(c), round(size * 0.75))  # shaft
+    painter.setPen(QPen(color, 2))
+    painter.drawLine(8, 4, 8, 12)  # shaft
     if up:
-        painter.drawLine(round(size * 0.3), round(size * 0.45), round(c), round(size * 0.25))
-        painter.drawLine(round(c), round(size * 0.25), round(size * 0.7), round(size * 0.45))
+        painter.drawLine(5, 7, 8, 4)
+        painter.drawLine(8, 4, 11, 7)
     else:
-        painter.drawLine(round(size * 0.3), round(size * 0.55), round(c), round(size * 0.75))
-        painter.drawLine(round(c), round(size * 0.75), round(size * 0.7), round(size * 0.55))
+        painter.drawLine(5, 9, 8, 12)
+        painter.drawLine(8, 12, 11, 9)
     painter.end()
     return QIcon(pixmap)
 
@@ -272,10 +262,7 @@ class CalltreeWidget(QWidget):
 
         self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True, sidebar)
         self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False, sidebar)
-        # Match the current-function box width to the (incoming) search box.
-        self.cur_func_layout = CurrentFunctionNameLayout(
-            sidebar, width_ref=self.in_calltree.util.func_filter
-        )
+        self.cur_func_layout = CurrentFunctionNameLayout(sidebar)
         self.cur_func_text = self.cur_func_layout.cur_func_text
 
         calltree_layout = QVBoxLayout()
@@ -327,9 +314,9 @@ class MoreItem(QStandardItem):
 
 class _FuncNameLineEdit(QLineEdit):
     """Read-only function-name field for the current-function row. Because the box is
-    pinned to the (narrow) search-box width, long names are made readable via horizontal
-    mouse-wheel scrolling, are always shown from the start, and expose the full name as a
-    tooltip. Clicks are routed to the preview / commit callbacks."""
+    pinned to the (narrow) search-box width, a long name is shown from the start and its
+    full text is exposed as a tooltip. Clicks are routed to the preview / commit
+    callbacks."""
 
     def __init__(self):
         super().__init__()
@@ -342,28 +329,6 @@ class _FuncNameLineEdit(QLineEdit):
         super().setText(text)
         self.setCursorPosition(0)  # show the start of a long name, not the end
         self.setToolTip(text)  # full name on hover
-
-    def wheelEvent(self, event):
-        # Horizontal scroll by moving the cursor just past the currently-visible edge in
-        # the scroll direction, which forces QLineEdit to scroll the view. Moving the
-        # cursor *within* the visible text does not scroll (the dead zone that made
-        # scrolling back left feel stuck), so we anchor off the visible edge char found
-        # with cursorPositionAt(). Use whichever wheel axis is active — macOS reports a
-        # horizontal trackpad swipe as angleDelta().x(), which a y-only check missed
-        # (leaving left scroll dead).
-        delta = event.angleDelta()
-        amount = delta.y() if delta.y() != 0 else delta.x()
-        if amount == 0:
-            return
-        step = 4
-        mid_y = self.height() // 2
-        if amount > 0:  # wheel up / swipe -> scroll left
-            left_char = self.cursorPositionAt(QPoint(0, mid_y))
-            self.setCursorPosition(max(0, left_char - step))
-        else:  # wheel down / swipe -> scroll right
-            right_char = self.cursorPositionAt(QPoint(self.width(), mid_y))
-            self.setCursorPosition(min(len(self.text()), right_char + step))
-        event.accept()
 
     def mousePressEvent(self, event):
         if self._on_click is not None:
@@ -379,40 +344,17 @@ class CurrentFunctionNameLayout(QHBoxLayout):
     single click previews (navigate the main view without re-rooting the Current
     tab), a double click commits (navigate and re-root the Current tab)."""
 
-    def __init__(self, sidebar=None, width_ref=None):
+    def __init__(self, sidebar=None):
         super().__init__()
         self.sidebar = sidebar
-        # A widget (the search box) whose width the function box should match. When
-        # given, the function box is pinned to that width and a stretch right-aligns the
-        # buttons; otherwise the box stretches to fill the row.
-        self._width_ref = width_ref
         self.binary_view = None
-        # A read-only line edit (same widget/height as the search box) so the
-        # current-function row matches the search toolbar row; wheel-scrollable for long
-        # names since the box is pinned to the (narrow) search-box width.
+        # A read-only line edit that stretches to fill the row (buttons stay right-
+        # aligned); long names show from the start and expose the full text as a tooltip.
         self.cur_func_text = _FuncNameLineEdit()
         self.cur_func_text._on_click = self.preview_func
         self.cur_func_text._on_double = self.goto_func
-        super().addWidget(self.cur_func_text, 0 if width_ref is not None else 1)
+        super().addWidget(self.cur_func_text, 1)  # stretch so buttons stay right-aligned
         self._add_toolbar()
-        if width_ref is not None:
-            width_ref.installEventFilter(self)  # follow the search box's width
-            self._sync_width()
-
-    def eventFilter(self, obj, event):
-        if obj is self._width_ref and event.type() in (QEvent.Resize, QEvent.Show):
-            self._sync_width()
-        return False
-
-    def _sync_width(self):
-        if self._width_ref is None:
-            return
-        try:
-            width = self._width_ref.width()
-        except RuntimeError:
-            return  # search box was destroyed
-        if width > 0:
-            self.cur_func_text.setFixedWidth(width)
 
     def _add_toolbar(self):
         """Graph / pin / close buttons on the current-function row, right-aligned and
@@ -447,9 +389,8 @@ class CurrentFunctionNameLayout(QHBoxLayout):
         separator.setFrameShape(QFrame.VLine)
         separator.setFrameShadow(QFrame.Sunken)
 
-        # [function box (= search width)] [stretch] [graph] | [pin] [close]
-        if self._width_ref is not None:
-            self.addStretch(1)  # right-align the buttons when the box is fixed-width
+        # [function box ··········] (space) [graph] | [pin] [close]
+        self.addSpacing(8)  # gap between the current-function box and the graph button
         self.addWidget(self.graph_button)
         self.addSpacing(6)
         self.addWidget(separator)
@@ -498,8 +439,6 @@ class CallTreeUtilLayout(QHBoxLayout):
         super().__init__()
         self.calltree = calltree
         btn_size = QSize(25, 25)
-        icon_px = 20  # render toolbar glyphs larger than the old 16 so they're legible
-        icon_size = QSize(icon_px, icon_px)
         icon_color = calltree.treeview.palette().color(QPalette.ButtonText)
 
         self.func_filter = QLineEdit()
@@ -516,8 +455,7 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.match_label.setMinimumWidth(52)
 
         self.search_button = QPushButton()
-        self.search_button.setIcon(_search_icon(icon_color, size=icon_px))
-        self.search_button.setIconSize(icon_size)
+        self.search_button.setIcon(_search_icon(icon_color))
         self.search_button.setFixedSize(btn_size)
         self.search_button.setToolTip(
             "Search the entire call subtree by name (ignores depth / node caps)"
@@ -525,52 +463,22 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.search_button.clicked.connect(self.trigger_search)
 
         self.prev_button = QPushButton()
-        self.prev_button.setIcon(_arrow_icon(icon_color, up=True, size=icon_px))
-        self.prev_button.setIconSize(icon_size)
+        self.prev_button.setIcon(_arrow_icon(icon_color, up=True))
         self.prev_button.setToolTip("Previous match")
         self.prev_button.setFixedSize(btn_size)
         self.prev_button.clicked.connect(self.calltree.prev_match)
 
         self.next_button = QPushButton()
-        self.next_button.setIcon(_arrow_icon(icon_color, up=False, size=icon_px))
-        self.next_button.setIconSize(icon_size)
+        self.next_button.setIcon(_arrow_icon(icon_color, up=False))
         self.next_button.setToolTip("Next match")
         self.next_button.setFixedSize(btn_size)
         self.next_button.clicked.connect(self.calltree.next_match)
-
-        separator = QFrame()
-        separator.setFrameShape(QFrame.VLine)
-        separator.setFrameShadow(QFrame.Sunken)
-
-        self.spinbox = QSpinBox()
-        self.spinbox.valueChanged.connect(self.spinbox_changed)
-        self.spinbox.setValue(self.calltree.func_depth)
-
-        self.expand_all_button = QPushButton()
-        self.expand_all_button.setIcon(_pm_icon(icon_color, plus=True, size=icon_px))
-        self.expand_all_button.setIconSize(icon_size)
-        self.expand_all_button.setToolTip("Expand the full call subtree")
-        self.expand_all_button.setFixedSize(btn_size)
-        self.expand_all_button.clicked.connect(self.calltree.expand_all)
-
-        self.collapse_all_button = QPushButton()
-        self.collapse_all_button.setIcon(_pm_icon(icon_color, plus=False, size=icon_px))
-        self.collapse_all_button.setIconSize(icon_size)
-        self.collapse_all_button.setToolTip("Collapse all")
-        self.collapse_all_button.setFixedSize(btn_size)
-        self.collapse_all_button.clicked.connect(self.calltree.collapse_all)
 
         super().addWidget(self.func_filter)
         super().addWidget(self.match_label)
         super().addWidget(self.search_button)
         super().addWidget(self.prev_button)
         super().addWidget(self.next_button)
-        super().addSpacing(6)
-        super().addWidget(separator)
-        super().addSpacing(6)
-        super().addWidget(self.spinbox)
-        super().addWidget(self.expand_all_button)
-        super().addWidget(self.collapse_all_button)
 
     def set_match_count(self, cur, total):
         self.match_label.setText(f"{cur} of {total}")
@@ -580,6 +488,42 @@ class CallTreeUtilLayout(QHBoxLayout):
 
     def trigger_search(self):
         self.calltree.do_search(self.func_filter.text())
+
+
+# Per-pane header: the "<direction> Calls" label plus the depth + expand/collapse
+# controls (moved here from the search toolbar), sized like the search row.
+class CallTreeHeaderLayout(QHBoxLayout):
+    def __init__(self, calltree: "CallTreeLayout", label_name: str):
+        super().__init__()
+        self.calltree = calltree
+        btn_size = QSize(25, 25)
+        icon_color = calltree.treeview.palette().color(QPalette.ButtonText)
+
+        self.label = QLabel(label_name)
+
+        self.spinbox = QSpinBox()
+        self.spinbox.valueChanged.connect(self.spinbox_changed)
+        self.spinbox.setValue(calltree.func_depth)
+
+        self.expand_all_button = QPushButton()
+        self.expand_all_button.setIcon(_pm_icon(icon_color, plus=True))
+        self.expand_all_button.setToolTip("Expand the full call subtree")
+        self.expand_all_button.setFixedSize(btn_size)
+        self.expand_all_button.clicked.connect(calltree.expand_all)
+
+        self.collapse_all_button = QPushButton()
+        self.collapse_all_button.setIcon(_pm_icon(icon_color, plus=False))
+        self.collapse_all_button.setToolTip("Collapse all")
+        self.collapse_all_button.setFixedSize(btn_size)
+        self.collapse_all_button.clicked.connect(calltree.collapse_all)
+
+        # [<direction> Calls ················] [depth] [⊞] [⊟]
+        super().addWidget(self.label)
+        super().addStretch(1)
+        super().addWidget(self.spinbox)
+        super().addSpacing(6)  # gap between the depth box and the expand button
+        super().addWidget(self.expand_all_button)
+        super().addWidget(self.collapse_all_button)
 
     def spinbox_changed(self):
         self.calltree.func_depth = self.spinbox.value()
@@ -654,6 +598,9 @@ class CallTreeLayout(QVBoxLayout):
         self.treeview.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.treeview.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.treeview.setTextElideMode(Qt.ElideNone)
+        # The "<direction> Calls" label lives in the header row now (with the depth +
+        # expand/collapse controls), so hide the tree's own column header.
+        self.treeview.setHeaderHidden(True)
 
         # Single click jumps to the call site; double click drills into the function.
         self.treeview.clicked.connect(self.goto_first_func_use)
@@ -664,6 +611,8 @@ class CallTreeLayout(QVBoxLayout):
         self.treeview._on_resize = self._on_viewport_resized
 
         self.set_label(self.label_name)
+        self.header = CallTreeHeaderLayout(self, self.label_name)
+        super().addLayout(self.header)
         super().addWidget(self.treeview)
         self.util = CallTreeUtilLayout(self)
         super().addLayout(self.util)
