@@ -145,9 +145,15 @@ class CalltreeSidebarWidget(SidebarWidget):
         calltree_layout = QVBoxLayout()
 
         self.calltree_tab = QTabWidget()
-        # Make the "Current" / pinned tabs a bit bigger (taller + wider) than the
-        # compact default.
-        self.calltree_tab.setStyleSheet("QTabBar::tab { padding: 6px 12px; }")
+        # Make the "Current" / pinned tabs a bit bigger via a larger tab-bar font. A
+        # QSS `padding` rule would force Qt into stylesheet (non-native) tab rendering,
+        # which drew a stray border/white line and squared-off corners; bumping the font
+        # keeps native rendering while enlarging the tabs.
+        _tab_bar = self.calltree_tab.tabBar()
+        _tab_font = _tab_bar.font()
+        if _tab_font.pointSizeF() > 0:
+            _tab_font.setPointSizeF(_tab_font.pointSizeF() * 1.15)
+            _tab_bar.setFont(_tab_font)
         self.current_calltree = CalltreeWidget(sidebar=self)
         self.calltree_tab.addTab(self.current_calltree, "Current")
         # The Current tab is not refreshed while it is hidden (e.g. a pinned tab is
