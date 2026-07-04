@@ -51,32 +51,18 @@ EXPAND_ALL_NODES = 5000  # rows revealed by the expand-all (+) button
 SEARCH_TREE_NODES = 20000  # render safety cap on the pruned search-result call tree
 
 
-def _search_icon(color: QColor, size: int = 16) -> QIcon:
-    """Draw a small magnifying-glass icon for the search button."""
+def _pm_icon(color: QColor, plus: bool, size: int = 16) -> QIcon:
+    """Draw a plain plus (expand) or minus (collapse) glyph — no surrounding box."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
     painter.setPen(QPen(color, 2))
-    painter.setBrush(Qt.NoBrush)
-    painter.drawEllipse(2, 2, 8, 8)  # lens
-    painter.drawLine(9, 9, 14, 14)  # handle
-    painter.end()
-    return QIcon(pixmap)
-
-
-def _pm_icon(color: QColor, plus: bool, size: int = 16) -> QIcon:
-    """Draw a plus-in-a-box (expand) or minus-in-a-box (collapse) icon."""
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    painter.setPen(QPen(color, 1.5))
-    painter.setBrush(Qt.NoBrush)
-    painter.drawRoundedRect(3, 3, 10, 10, 2, 2)
-    painter.drawLine(6, 8, 10, 8)  # horizontal bar (minus / part of plus)
+    m = 3  # margin from the edges
+    c = size // 2
+    painter.drawLine(m, c, size - m, c)  # horizontal bar (minus / part of plus)
     if plus:
-        painter.drawLine(8, 6, 8, 10)  # vertical bar completes the plus
+        painter.drawLine(c, m, c, size - m)  # vertical bar completes the plus
     painter.end()
     return QIcon(pixmap)
 
@@ -443,8 +429,12 @@ class CallTreeUtilLayout(QHBoxLayout):
 
         self.func_filter = QLineEdit()
         self.func_filter.setPlaceholderText("search all calls (Enter)")
-        # Search is explicit (Enter or the button), not per-keystroke.
+        # Search is explicit (press Enter), not per-keystroke.
         self.func_filter.returnPressed.connect(self.trigger_search)
+        # Built-in clear (x) button, shown only while there's text; clearing it drops
+        # the search and restores the normal call tree.
+        self.func_filter.setClearButtonEnabled(True)
+        self.func_filter.textChanged.connect(self._on_search_text_changed)
 
         # "cur of total" match counter, shown to the right of the search box only while
         # a search is active (blank during normal browsing so an idle "0 of 0" is never
@@ -453,14 +443,6 @@ class CallTreeUtilLayout(QHBoxLayout):
         self.match_label.setToolTip("Current match / total matches")
         self.match_label.setAlignment(Qt.AlignCenter)
         self.match_label.setMinimumWidth(52)
-
-        self.search_button = QPushButton()
-        self.search_button.setIcon(_search_icon(icon_color))
-        self.search_button.setFixedSize(btn_size)
-        self.search_button.setToolTip(
-            "Search the entire call subtree by name (ignores depth / node caps)"
-        )
-        self.search_button.clicked.connect(self.trigger_search)
 
         self.prev_button = QPushButton()
         self.prev_button.setIcon(_arrow_icon(icon_color, up=True))
@@ -476,7 +458,7 @@ class CallTreeUtilLayout(QHBoxLayout):
 
         super().addWidget(self.func_filter)
         super().addWidget(self.match_label)
-        super().addWidget(self.search_button)
+        super().addSpacing(6)  # gap before the prev/next match buttons
         super().addWidget(self.prev_button)
         super().addWidget(self.next_button)
 
@@ -488,6 +470,12 @@ class CallTreeUtilLayout(QHBoxLayout):
 
     def trigger_search(self):
         self.calltree.do_search(self.func_filter.text())
+
+    def _on_search_text_changed(self, text):
+        # When the box is emptied (clear button or deleting), drop the active search and
+        # restore the normal call tree. Non-empty edits still wait for Enter / the button.
+        if not text:
+            self.calltree.do_search("")
 
 
 # Per-pane header: the "<direction> Calls" label plus the depth + expand/collapse
@@ -517,7 +505,7 @@ class CallTreeHeaderLayout(QHBoxLayout):
         self.collapse_all_button.setFixedSize(btn_size)
         self.collapse_all_button.clicked.connect(calltree.collapse_all)
 
-        # [<direction> Calls ················] [depth] [⊞] [⊟]
+        # [<direction> Calls ················] [depth] (space) [⊞] [⊟]
         super().addWidget(self.label)
         super().addStretch(1)
         super().addWidget(self.spinbox)
