@@ -7,7 +7,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Keep the authored call structure intact so Binary Ninja (and the Calltree
 # plugin) see the same graph the sources describe: no inlining, no optimization.
-set(CALLTREE_FIXTURE_FLAGS -O0 -fno-inline -fno-inline-functions -g)
+# Flags are selected per compiler so the fixture also builds on MSVC/Windows.
+set(CALLTREE_FIXTURE_FLAGS
+    $<$<CXX_COMPILER_ID:MSVC>:/Od;/Ob0;/Zi>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-O0;-fno-inline;-fno-inline-functions;-g>
+)
 
 # --- Fixture: the deliberately-structured call graph -----------------------
 add_library(calltree_fixture STATIC src/call_graph.cpp)
