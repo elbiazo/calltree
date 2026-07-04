@@ -147,6 +147,12 @@ automatically, so you must add `networkx` to Binary Ninja's Python yourself:
 so a running instance won't pick it up until relaunched. Without it, the call
 trees render empty and an error is logged.
 
+## Architecture
+
+For a detailed design overview — modules, the call-graph data model, the threading
+model, lazy rendering, search, dirty-tracking, and key control flows — see
+[`doc/architecture.md`](doc/architecture.md).
+
 ## Contributors
 
 Thanks everyone that have contributed to calltree!
