@@ -163,7 +163,12 @@ def _collect_tree_rows(bv, root_func, is_caller, budget, needle=None):
     off the main thread.
     """
     try:
-        edges, _ = gather_subtree(root_func, is_caller, 10 ** 9, budget)
+        # max_nodes=None (unbounded) on purpose: the walk must visit the *entire*
+        # subtree so search finds every match and every ancestor path to it. `budget`
+        # is only a cap on how many rows we later emit (the DFS below), not on the walk
+        # — capping the walk here (e.g. at SEARCH_TREE_NODES) would silently drop
+        # matches that live beyond the cap in a large subtree.
+        edges, _ = gather_subtree(root_func, is_caller, 10 ** 9, None)
     except Exception:
         edges = []
 
