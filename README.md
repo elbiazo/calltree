@@ -28,9 +28,6 @@ This plugin requires the following minimum version of Binary Ninja:
 
 This plugin is released under an [MIT license](./LICENSE).
 
-## Caution
-
-When working with really big binaries with alot of xrefs, you would want to change recursive depth to smaller number or else Binary Ninja might hang.
 ## Description
 
 Calltree is a plugin that generates call tree for a function. It is an alternative view for callgraph. It is a multiview plugin, so you can have multiple calltree views open at the same time.
@@ -92,47 +89,6 @@ walk runs in the background.
 
 - Initial incoming/outgoing depth, max auto-expanded nodes, and pinned-tab name length
   are all configurable under the `Calltree` settings group.
-
-## Screenshots
-
-### Default View
-
-![](images/2023-03-06-23-31-27.png)
-
-### Expand and Collapse tree
-
-**Expand**
-
-![](images/2023-03-06-23-44-02.png)
-
-**Collapse**
-
-![](images/2023-03-06-23-44-24.png)
-
-**Search**
-
-![](images/2022-02-09-16-53-33.png)
-
-### Recursion Depth
-
-**Show Only Root Level**
-
-![](images/2022-02-09-16-57-21.png)
-
-**Default Recursion Depth in Setting**
-
-![](images/2022-02-09-16-59-03.png)
-
-### Pinning and Removing Calltree View
-
-**Pinning Calltree View**
-
-![](images/2023-03-06-23-40-42.png)
-
-**Pinned Calltree Name Max Length**
-
-![](images/2023-03-06-23-46-04.png)
-
 
 ## Python API
 
