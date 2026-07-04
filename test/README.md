@@ -84,6 +84,22 @@ python3 test/python/test_callgraph_api.py test/build/calltree_sample
 exec(open("<path>/test/python/test_callgraph_api.py").read())
 ```
 
+### `example_outgoing_reach.py` — "is X in main's outgoing calls?"
+
+A focused example: builds the outgoing call graph from `main` and checks whether
+a target function (default `_chain_c`) appears in it, printing the direct-callee
+check, the reachability check, and the shortest path that reaches it. Override
+the target with `--target`:
+
+```bash
+python3 test/python/example_outgoing_reach.py test/build/calltree_sample
+python3 test/python/example_outgoing_reach.py --target _diamond_bottom \
+    test/build/calltree_sample
+```
+
+Symbol matching is tolerant of a leading underscore, so `_chain_c` and `chain_c`
+both work.
+
 ## Fixture → CallGraph API mapping
 
 | Fixture structure          | Validates                                              |
