@@ -53,18 +53,25 @@ Calltree is a plugin that generates call tree for a function. It is an alternati
   expanding the whole tree.
 - **Horizontal scrolling** with full, un-elided names.
 
-### Toolbar (per pane)
+### Per-pane controls
 
-Layout: `[search] [x of y] [🔍] [↑ prev] [↓ next] | [depth] [⊞ expand-all] [⊟ collapse]`
+Each pane has a **header row** and, below the tree, a **search row**:
 
-- **Search** — press Enter or the 🔍 button to search the **entire** call subtree by
-  name (ignoring the depth / node caps). The tree is pruned to just the paths leading to
-  matches, each branch **ending at its match**, with matches shown in **bold**.
-- **Match counter & navigation** — an `x of y` counter (shown only while searching) plus
-  **↑ prev / ↓ next** buttons cycle through matches, centering each in view; "No matches"
-  is shown when nothing matches.
-- **Depth** — the spinbox sets how many levels auto-expand on navigation.
-- **Expand-all / Collapse** — `⊞` reveals the entire reachable subtree; `⊟` collapses it.
+- **Header row** — `[<direction> Calls ········· [depth] [+] [−]]`: the pane label plus
+  the **depth** spinbox (how many levels auto-expand on navigation) and the **+**
+  expand-all / **−** collapse buttons (`+` reveals the entire reachable subtree, `−`
+  collapses it).
+- **Search row** — `[search box ×] [x of y] [↑] [↓]`: type a name and press **Enter** to
+  search the **entire** call subtree by name (ignoring depth / node caps). The tree is
+  pruned to just the paths leading to matches, each branch **ending at its match** (matches
+  in **bold**). The built-in **×** clear button (or emptying the box) drops the search and
+  restores the normal tree. The `x of y` counter (shown only while searching) and the
+  **↑ / ↓** buttons cycle through matches, centering each; **"No matches"** is shown when
+  nothing matches.
+
+Panes also show explicit placeholders: **"No functions"** (no callers/callees in that
+direction), **"Depth is 0"** (depth set to 0), and **"Loading…"** while a large expand-all
+walk runs in the background.
 
 ### Call graph export
 

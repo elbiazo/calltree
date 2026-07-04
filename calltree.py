@@ -1125,6 +1125,13 @@ class CallTreeLayout(QVBoxLayout):
         if not force and not self.treeview.isVisible():
             return
 
+        # Switching to a different function resets the search box (without re-triggering
+        # its textChanged -> search-clear handler).
+        if cur_func is not self.cur_func and self.util.func_filter.text():
+            self.util.func_filter.blockSignals(True)
+            self.util.func_filter.clear()
+            self.util.func_filter.blockSignals(False)
+
         self._search_active = False  # navigation always shows the normal call tree
         self.clear()
         self.cur_func = cur_func

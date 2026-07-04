@@ -164,35 +164,35 @@ CalltreeWidget (calltree.py)                    ← one tab
 └── CallTreeLayout  is_caller=False  ("Outgoing Calls")
 
 CallTreeLayout (calltree.py)                    ← one tree
-├── CallTreeHeaderLayout: [<direction> Calls ······ [depth] [⊞ expand] [⊟ collapse]]
+├── CallTreeHeaderLayout: [<direction> Calls ······ [depth] [+ expand] [− collapse]]
 ├── QTreeView ── QSortFilterProxyModel ── QStandardItemModel
 │     (header hidden — label is in the header row; content-sized column, no elision)
-└── CallTreeUtilLayout: [search box] [x of y] [🔍] [↑ prev] [↓ next]
+└── CallTreeUtilLayout: [search box ×] [x of y] [↑ prev] [↓ next]
 ```
 
 The **`CallTreeHeaderLayout`** row carries the pane's `"<direction> Calls"` label plus
 the depth spinbox and expand/collapse controls (the tree's own column header is hidden
 via `setHeaderHidden(True)`). The **`CallTreeUtilLayout`** row below the tree keeps just
-the search box, match counter and search/prev/next. Both rows use the same 25×25 buttons
-so they are the same height.
+the search box, match counter and prev/next. Both rows use the same 25×25 buttons so they
+are the same height.
 
 - **`BNFuncItem`** is the tree row: it holds `func`, `level` (1-based depth),
   `loaded` (children populated?) and `expandable` (may have children?). A
   **`MoreItem`** (`is_more=True`) is the clickable "… N more" overflow row; clicking
   it loads all remaining children (see §7).
-- **`CurrentFunctionNameLayout`** is the per-tab header: the clickable function-name
-  `QTextEdit` (single click previews, double click commits) plus a right-aligned
-  toolbar `[graph] | [pin] [close]` (25×25 buttons matching the search toolbar,
-  `_add_toolbar`). The buttons drive the owning sidebar
+- **`CurrentFunctionNameLayout`** is the per-tab header: the clickable, read-only
+  function-name field (`_FuncNameLineEdit`, single click previews / double click commits,
+  full name in a tooltip) that stretches to fill the row, plus a right-aligned toolbar
+  `[graph] | [pin] [close]` (25×25 buttons, `_add_toolbar`) that drives the owning sidebar
   (`create_call_graph` / `pin_current_tab` / `remove_current_tab`).
-- **`CallTreeUtilLayout`** wires the toolbar controls to `CallTreeLayout`. The
-  search / prev / next / expand / collapse buttons use small QPainter-drawn,
-  theme-colored icons (`_search_icon` magnifier, `_arrow_icon` up/down,
-  `_pm_icon` plus/minus box); the prev/next arrows cycle through the search matches
-  (see §8). A `match_label` ("`x of y`") sits right of the search box as a persistent,
-  min-width slot showing the current/total match count. The `QFrame` separator has
-  spacing on both sides. The tree enables full horizontal scrolling via an
-  `Interactive` column sized explicitly by `_fit_column` to
+- **`CallTreeUtilLayout`** wires the search controls to `CallTreeLayout`. Search is
+  triggered by **Enter** in the box (there is no search button); the box's built-in **×**
+  clear button (`setClearButtonEnabled`) drops the search. The prev/next buttons use
+  small QPainter-drawn, theme-colored icons (`_arrow_icon` up/down) and cycle through the
+  matches (see §8); the header row's expand/collapse use `_pm_icon` (plain `+` / `−`
+  glyphs). A `match_label` ("`x of y`") sits right of the search box as a persistent,
+  min-width slot showing the current/total match count. The tree enables full horizontal
+  scrolling via an `Interactive` column sized explicitly by `_fit_column` to
   `max(content_width, viewport_width)` (`resizeColumnToContents` + a high
   `resizeContentsPrecision`, `stretchLastSection=False`, `ScrollPerPixel`,
   `ElideNone`). The viewport floor makes the column always fill the pane, so the
@@ -342,8 +342,11 @@ traversal stops cleanly instead of crashing.
 
 ## 8. Search — pruned call tree (calltree.py)
 
-Search is **explicit** (Enter in the box or the 🔍 button), not per-keystroke, and
-it covers the **entire** subtree regardless of depth or node caps.
+Search is **explicit** (press Enter in the box), not per-keystroke, and it covers the
+**entire** subtree regardless of depth or node caps. Clearing the box — via its built-in
+**×** button or by deleting the text — drops the search and restores the normal tree
+(`textChanged` → `do_search("")` → `_exit_search`), and switching to a different function
+also clears the box.
 
 Flow:
 
@@ -479,8 +482,8 @@ Registered under the `calltree` group:
 
 | Setting                 | Default | Meaning |
 |-------------------------|---------|---------|
-| `calltree.in_depth`     | 5       | Initial incoming (callers) depth. |
-| `calltree.out_depth`    | 5       | Initial outgoing (callees) depth. |
+| `calltree.in_depth`     | 10      | Initial incoming (callers) depth. |
+| `calltree.out_depth`    | 10      | Initial outgoing (callees) depth. |
 | `calltree.pin_name_len` | 10      | Max characters shown on a pinned tab label. |
 | `calltree.max_nodes`    | 3000    | Safety cap on rows auto-expanded (BFS) on navigation. `minValue` 10, `maxValue` 1,000,000. Read dynamically each navigation. |
 
@@ -514,7 +517,7 @@ QTreeView.expanded → _on_item_expanded → _ensure_children
   → expand(node, depth=1) → _add_children(node) → (placeholders on grandchildren)
 ```
 
-**Search (Enter / 🔍):**
+**Search (Enter):**
 ```
 do_search → show "Searching…" → _run_in_background:
   [worker] _collect_tree_rows(needle): gather_subtree(all) → demangle → match
