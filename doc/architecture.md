@@ -373,6 +373,10 @@ Notes:
   recursion-limit issues on deep chains); cycles are shown once and not recursed.
 - A `_search_token` invalidates stale/superseded searches; navigation and the `+`
   button exit search mode.
+- Refreshing a pane for the **same** function (e.g. switching back to the Current tab,
+  which calls `_refresh_current_tab` → `update_widget(force=True)`) is a **no-op while a
+  search is active**, so the search results / counter / prev-next stay intact instead of
+  being rebuilt away. Navigating to a *different* function still resets the search.
 - `SEARCH_TREE_NODES` is only a **render** safety cap — the search *walk* itself is
   unbounded.
 - The match rows are collected (in reading order) into `_match_items` during the

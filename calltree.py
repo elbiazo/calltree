@@ -1125,6 +1125,13 @@ class CallTreeLayout(QVBoxLayout):
         if not force and not self.treeview.isVisible():
             return
 
+        # A refresh for the *same* function (e.g. switching back to the Current tab, or
+        # a re-navigation to the current address) must not discard an active search — the
+        # rebuild would wipe _match_items and drop out of search mode, leaving the search
+        # box text but a broken "no counter / can't step" state. Keep the results intact.
+        if cur_func is self.cur_func and self._search_active:
+            return
+
         # Switching to a different function resets the search box (without re-triggering
         # its textChanged -> search-clear handler).
         if cur_func is not self.cur_func and self.util.func_filter.text():
