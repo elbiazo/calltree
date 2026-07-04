@@ -163,7 +163,7 @@ def _collect_tree_rows(bv, root_func, is_caller, budget, needle=None):
     off the main thread.
     """
     try:
-        edges, _ = gather_subtree(root_func, is_caller, 10 ** 9, None)
+        edges, _ = gather_subtree(root_func, is_caller, 10 ** 9, budget)
     except Exception:
         edges = []
 
