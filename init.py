@@ -187,6 +187,19 @@ class CalltreeSidebarWidget(SidebarWidget):
         if self.calltree_tab.currentIndex() == 0:
             self._refresh_current_tab()
 
+    def set_current_function(self, func):
+        """Re-root the Current tab onto ``func`` (label + caller/callee trees).
+
+        When the Current tab is hidden the trees are rebuilt lazily by
+        _refresh_current_tab on the next show; the label is always updated.
+        """
+        self.cur_func = func
+        self.current_calltree.cur_func_text.setText(
+            demangle_name(self.binary_view, func.name)
+        )
+        self.current_calltree.in_calltree.update_widget(func)
+        self.current_calltree.out_calltree.update_widget(func)
+
     def notifyViewLocationChanged(self, view, location):
         def extract_location_info(location):
             # make a copy of location values so that they are retained after
@@ -197,12 +210,12 @@ class CalltreeSidebarWidget(SidebarWidget):
                 location.getFunction(),
             ]
 
-        # A single click in a call tree navigates the main view to a call site but
-        # must not touch the Current tab at all. The click handler sets
-        # skip_next_update just before this fires, so consume it and return without
-        # updating self.cur_func or re-rendering the Current tab. Keeping cur_func
-        # untouched also keeps a later _refresh_current_tab() rooted on the same
-        # function. prev_location is advanced so a follow-up same-address event
+        # A single click in a call tree (or the function-name header) navigates the
+        # main view but must not touch the Current tab at all. The click handler
+        # sets skip_next_update just before this fires, so consume it and return
+        # without updating self.cur_func or re-rendering the Current tab. Keeping
+        # cur_func untouched also keeps a later _refresh_current_tab() rooted on the
+        # same function. prev_location is advanced so a follow-up same-address event
         # (different InstrIndex) doesn't re-root the Current tab either.
         if self.skip_next_update:
             self.skip_next_update = False
@@ -225,11 +238,7 @@ class CalltreeSidebarWidget(SidebarWidget):
                 self.prev_location = extract_location_info(location)
                 return
 
-        self.current_calltree.cur_func_text.setText(
-            demangle_name(self.binary_view, self.cur_func.name)
-        )
-        self.current_calltree.in_calltree.update_widget(self.cur_func)
-        self.current_calltree.out_calltree.update_widget(self.cur_func)
+        self.set_current_function(self.cur_func)
         self.prev_location = extract_location_info(location)
 
     def notifyViewChanged(self, view_frame):

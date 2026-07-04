@@ -39,7 +39,7 @@ class CalltreeWidget(QWidget):
 
         self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True, sidebar)
         self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False, sidebar)
-        self.cur_func_layout = CurrentFunctionNameLayout()
+        self.cur_func_layout = CurrentFunctionNameLayout(sidebar)
         self.cur_func_text = self.cur_func_layout.cur_func_text
 
         calltree_layout = QVBoxLayout()
@@ -67,23 +67,56 @@ class BNFuncItem(QStandardItem):
 
 
 class CurrentFunctionNameLayout(QHBoxLayout):
-    def __init__(self):
+    """Header showing the pane's root function. Clicking mirrors the call trees: a
+    single click previews (navigate the main view without re-rooting the Current
+    tab), a double click commits (navigate and re-root the Current tab)."""
+
+    def __init__(self, sidebar=None):
         super().__init__()
+        self.sidebar = sidebar
         self.binary_view = None
         self.cur_func_text = QTextEdit()
         self.cur_func_text.setReadOnly(True)
         self.cur_func_text.setMaximumHeight(30)
         self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
-        self.cur_func_text.mousePressEvent = self.goto_func
+        self.cur_func_text.mousePressEvent = self.preview_func
+        self.cur_func_text.mouseDoubleClickEvent = self.goto_func
         super().addWidget(self.cur_func_text)
 
     # TODO: really should check the address as well as name; matching on name alone can fail.
+    def _lookup_func(self):
+        if self.binary_view is None:
+            return None
+        funcs = self.binary_view.get_functions_by_name(self.cur_func_text.toPlainText())
+        return funcs[0] if funcs else None
+
+    def preview_func(self, event):
+        """Single click: navigate the main view to the function without re-rooting
+        the Current tab. skip_next_update is only armed when the navigation will
+        actually move the view; otherwise the flag would dangle (no location change
+        to consume it) and swallow the next real navigation."""
+        func = self._lookup_func()
+        if func is None:
+            return
+        if self.sidebar is not None:
+            prev = self.sidebar.prev_location
+            if prev is None or prev[0] != func.start:
+                self.sidebar.skip_next_update = True
+        self.binary_view.navigate(self.binary_view.view, func.start)
+
     def goto_func(self, event):
-        cur_func = self.binary_view.get_functions_by_name(
-            self.cur_func_text.toPlainText()
-        )[0]
-        self.binary_view.navigate(self.binary_view.view, cur_func.start)
+        """Double click: navigate the main view to the function and re-root the
+        Current tab onto it. The re-root is done explicitly because single and
+        double click target the same address, so the double click's navigate may be
+        a no-op that fires no location change."""
+        func = self._lookup_func()
+        if func is None:
+            return
+        if self.sidebar is not None:
+            self.sidebar.set_current_function(func)
+            self.sidebar.skip_next_update = False
+        self.binary_view.navigate(self.binary_view.view, func.start)
 
 
 # Search bar plus expand/collapse and depth controls for one CallTreeLayout.
