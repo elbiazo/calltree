@@ -10,6 +10,7 @@ Generates call tree. Alternative view for callgraph.
 
 ## Releases
 
+* 3.0 -- Graph-backed call data + Python API (`networkx`)
 * 2.1 -- Bug Fix
 * 2.0 -- Multiview Support
 * 1.2 -- Bug Fixes
@@ -72,6 +73,79 @@ Calltree is a plugin that generates call tree for a function. It is an alternati
 
 ![](images/2023-03-06-23-46-04.png)
 
+
+## Python API
+
+As of `3.0`, the caller/callee relationships are backed by a real graph
+(`networkx.DiGraph`) that is decoupled from the UI, so you can query the call
+graph programmatically from the Binary Ninja Python console. Nodes are function
+start addresses and every edge points from a **caller** to a **callee**.
+
+The graph is expanded lazily around a function and cached per `BinaryView`, so it
+stays cheap even on large binaries.
+
+```python
+from calltree import get_call_graph
+
+# `bv` is the current BinaryView. `cg` is cached per BinaryView.
+cg = get_call_graph(bv)
+
+main = bv.get_functions_by_name("main")[0]
+
+# Grow the graph around a function (direction: "callees", "callers" or "both").
+cg.expand(main, direction="both", max_depth=6)
+
+# --- Queries ---
+cg.callees(main)          # functions main calls
+cg.callers("malloc")      # functions that call malloc (accepts Function/addr/name)
+
+# --- Search (substring by default; regex + mangled-name options available) ---
+cg.search("alloc")
+cg.search(r"^str.*cpy$", regex=True)
+
+# --- Path finding ---
+cg.reaches("main", "system")          # bool: can main reach system?
+cg.shortest_path("main", "system")    # [Function, ...]
+for path in cg.all_paths("main", "system", cutoff=8):
+    print([f.name for f in path])
+
+# --- Traversal ---
+for func in cg.bfs(main, direction="callees", max_depth=3):
+    print(func.name)
+
+# --- Export ---
+cg.to_networkx()   # the underlying networkx.DiGraph
+cg.to_dict()       # serializable {"nodes": [...], "edges": [...]}
+cg.to_edge_list()  # [(caller_addr, callee_addr), ...]
+```
+
+This plugin depends on [`networkx`](https://networkx.org/). Installing via the
+Binary Ninja plugin manager installs it automatically from `requirements.txt`; for
+manual installs, use the `Install python3 module` command palette action or
+`pip install networkx` against Binary Ninja's interpreter.
+
+### Manual / development checkouts
+
+If you cloned this repo straight into your Binary Ninja `plugins/` folder (instead
+of installing through the plugin manager), `requirements.txt` is **not** installed
+automatically, so you must add `networkx` to Binary Ninja's Python yourself:
+
+* **Easiest:** command palette (`CTRL/CMD-P`) → `Install python3 module` → enter
+  `networkx`.
+* **From a shell**, install into Binary Ninja's user `pythonXY` folder, e.g. on
+  macOS with the bundled Python 3.10:
+
+  ```bash
+  pip3 install --target \
+    "$HOME/Library/Application Support/Binary Ninja/python310" networkx
+  ```
+
+  (Linux uses `~/.binaryninja/pythonXY`; Windows uses
+  `%APPDATA%\Binary Ninja\pythonXY`.)
+
+**Restart Binary Ninja** afterwards — the plugin imports `networkx` at load time,
+so a running instance won't pick it up until relaunched. Without it, the call
+trees render empty and an error is logged.
 
 ## Contributors
 

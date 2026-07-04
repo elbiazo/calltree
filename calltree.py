@@ -24,6 +24,7 @@ from binaryninjaui import getThemeColor
 
 
 from .demangle import demangle_name
+from .callgraph import get_call_graph
 
 
 class CalltreeWidget(QWidget):
@@ -128,6 +129,9 @@ class CallTreeUtilLayout(QHBoxLayout):
 
 
 class CallTreeLayout(QVBoxLayout):
+    # Set once if networkx is unavailable, to avoid spamming the log on navigation.
+    _warned_missing_networkx = False
+
     def __init__(self, label_name: str, depth: int, is_caller: bool):
         super().__init__()
         self._cur_func = None
@@ -256,23 +260,48 @@ class CallTreeLayout(QVBoxLayout):
         self._skip_update = False
         self._binary_view.navigate(self._binary_view.view, cur_func.start)
 
-    def set_func_calls(self, cur_func, cur_std_item, is_caller: bool, depth=0):
-        if is_caller:
-            cur_func_calls = list(set(cur_func.callers))
-        else:
-            cur_func_calls = list(set(cur_func.callees))
+    def _direction(self) -> str:
+        """Graph traversal direction for this tree (incoming calls == callers)."""
+        return "callers" if self.is_caller else "callees"
 
-        if depth < self._func_depth:
-            if cur_func_calls:
-                for cur_func_call in cur_func_calls:
-                    new_std_item = BNFuncItem(self._binary_view, cur_func_call)
-                    cur_std_item.appendRow(new_std_item)
+    def _call_graph(self):
+        """Return the shared CallGraph for the current view, or None if unavailable."""
+        bv = self._binary_view
+        if bv is None:
+            return None
+        try:
+            return get_call_graph(bv)
+        except ImportError:
+            if not CallTreeLayout._warned_missing_networkx:
+                CallTreeLayout._warned_missing_networkx = True
+                try:
+                    import binaryninja
 
-                    # Dont search on function that calls itself
-                    if cur_func != cur_func_call:
-                        self.set_func_calls(
-                            cur_func_call, new_std_item, is_caller, depth + 1
-                        )
+                    binaryninja.log_error(
+                        "calltree: 'networkx' is not installed, call trees are "
+                        "disabled. Install it via the 'Install python3 module' "
+                        "command or 'pip install networkx'."
+                    )
+                except Exception:
+                    pass
+            return None
+
+    def render_calls(self, graph, cur_func, parent_item, depth, path):
+        """Populate ``parent_item`` with ``cur_func``'s neighbors from the graph.
+
+        Recurses up to ``func_depth``. ``path`` holds the addresses on the current
+        branch so cycles (e.g. ``A -> B -> A``) terminate instead of recursing.
+        """
+        for neighbor in graph.neighbors(cur_func, self._direction()):
+            if neighbor is None:
+                continue
+            new_std_item = BNFuncItem(self._binary_view, neighbor)
+            parent_item.appendRow(new_std_item)
+
+            if depth < self._func_depth and neighbor.start not in path:
+                self.render_calls(
+                    graph, neighbor, new_std_item, depth + 1, path | {neighbor.start}
+                )
 
     def update_widget(self, cur_func: Function):
         if not self.treeview.isVisible():
@@ -280,26 +309,22 @@ class CallTreeLayout(QVBoxLayout):
 
         # Clear previous calls
         self.clear()
-        call_root_node = self.model.invisibleRootItem()
-
         self.cur_func = cur_func
 
-        if self.is_caller:
-            cur_func_calls = list(set(cur_func.callers))
-        else:
-            cur_func_calls = list(set(cur_func.callees))
+        graph = self._call_graph()
+        if graph is None:
+            return
 
-        root_std_items = []
+        # Lazily grow the shared graph around the current function, then render the
+        # tree from it. max_depth is func_depth + 1 to cover the deepest rendered row.
+        graph.expand(
+            cur_func, direction=self._direction(), max_depth=self._func_depth + 1
+        )
 
-        # Set root std Items
-        if cur_func_calls:
-            for cur_func_call in cur_func_calls:
-                root_std_items.append(BNFuncItem(self._binary_view, cur_func_call))
-                cur_std_item = root_std_items[-1]
-                if cur_func != cur_func_call:
-                    self.set_func_calls(cur_func_call, cur_std_item, self.is_caller)
-
-        call_root_node.appendRows(root_std_items)
+        call_root_node = self.model.invisibleRootItem()
+        self.render_calls(
+            graph, cur_func, call_root_node, depth=0, path={cur_func.start}
+        )
         self.expand_all()
 
     def clear(self):

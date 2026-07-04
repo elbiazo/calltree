@@ -1,1 +1,6 @@
 *.pyc
+__pycache__/
+
+# CMake / C++ test build output
+test/build/
+build/
