@@ -2,7 +2,7 @@
 
 Author: **Eric Biazo**
 
-Calltree and Callgraph generator for function
+Calltree and Callgraph generator for a function
 
 ## Description:
 
