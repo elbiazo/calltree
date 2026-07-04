@@ -26,7 +26,9 @@ from PySide6.QtGui import (
 
 from .calltree import CalltreeWidget
 from binaryninja.settings import Settings
+from binaryninja import execute_on_main_thread
 from .demangle import demangle_name
+from .callgraph import get_call_graph
 
 Settings().register_group("calltree", "Calltree")
 Settings().register_setting(
@@ -259,6 +261,38 @@ class CalltreeSidebarWidget(SidebarWidget):
         self.current_calltree.in_calltree.binary_view = self.binary_view
         self.current_calltree.out_calltree.binary_view = self.binary_view
         self.current_calltree.cur_func_layout.binary_view = self.binary_view
+        self._arm_analysis_event(self.binary_view)
+
+    def _arm_analysis_event(self, bv):
+        """(Re)register a one-shot analysis-completion callback for ``bv``.
+
+        Binary Ninja runs the callback once per analysis pass, so we re-arm after
+        each refresh. This keeps the call trees correct as analysis discovers more
+        calls -- most visibly right after a file is first opened, when the initial
+        tree can be built before analysis has found every callee.
+        """
+        if bv is None:
+            return
+        try:
+            bv.add_analysis_completion_event(lambda: self._on_analysis_complete(bv))
+        except Exception:
+            pass
+
+    def _on_analysis_complete(self, bv):
+        # Fires on an analysis worker thread; hop to the UI thread before touching
+        # the graph cache or Qt models.
+        execute_on_main_thread(lambda: self._refresh_after_analysis(bv))
+
+    def _refresh_after_analysis(self, bv):
+        if self.binary_view is not bv:
+            return  # a different view is active now; ignore this stale completion
+        try:
+            get_call_graph(bv, refresh=True)
+        except ImportError:
+            return  # networkx missing -> trees stay empty, nothing to refresh
+        if self.cur_func is not None:
+            self.set_current_function(self.cur_func)
+        self._arm_analysis_event(bv)
 
 
 class CalltreeSidebarWidgetType(SidebarWidgetType):
