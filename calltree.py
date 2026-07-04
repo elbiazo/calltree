@@ -28,23 +28,24 @@ from .callgraph import get_call_graph
 
 
 class CalltreeWidget(QWidget):
-    def __init__(self):
+    """One call-tree tab: the current-function label plus the incoming and
+    outgoing call trees. ``sidebar`` owns this widget and is passed down so tree
+    clicks can tell it whether to re-root the Current tab on navigation."""
+
+    def __init__(self, sidebar=None):
         super().__init__()
-        calltree_layout = QVBoxLayout()
-        # Add widgets to the layout
         in_func_depth = Settings().get_integer("calltree.in_depth")
         out_func_depth = Settings().get_integer("calltree.out_depth")
 
-        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True)
-        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False)
+        self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True, sidebar)
+        self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False, sidebar)
         self.cur_func_layout = CurrentFunctionNameLayout()
-
         self.cur_func_text = self.cur_func_layout.cur_func_text
 
+        calltree_layout = QVBoxLayout()
         calltree_layout.addLayout(self.cur_func_layout)
         calltree_layout.addLayout(self.in_calltree)
         calltree_layout.addLayout(self.out_calltree)
-
         calltree_layout.setSpacing(0)
         calltree_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(calltree_layout)
@@ -68,38 +69,26 @@ class BNFuncItem(QStandardItem):
 class CurrentFunctionNameLayout(QHBoxLayout):
     def __init__(self):
         super().__init__()
-        self._binary_view = None
+        self.binary_view = None
         self.cur_func_text = QTextEdit()
         self.cur_func_text.setReadOnly(True)
         self.cur_func_text.setMaximumHeight(30)
         self.cur_func_text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.cur_func_text.setLineWrapMode(QTextEdit.NoWrap)
         self.cur_func_text.mousePressEvent = self.goto_func
-
         super().addWidget(self.cur_func_text)
 
-    @property
-    def binary_view(self):
-        return self._binary_view
-
-    @binary_view.setter
-    def binary_view(self, bv):
-        self._binary_view = bv
-
-    # TODO: really should check the address as well as name. just going to function name might fail
+    # TODO: really should check the address as well as name; matching on name alone can fail.
     def goto_func(self, event):
-        # just get the first one
-        cur_func = self._binary_view.get_functions_by_name(
+        cur_func = self.binary_view.get_functions_by_name(
             self.cur_func_text.toPlainText()
         )[0]
-        # make sure that sidebar is updated
-        self._binary_view.navigate(self._binary_view.view, cur_func.start)
+        self.binary_view.navigate(self.binary_view.view, cur_func.start)
 
 
-# Layout with search bar and expand/collapse buttons
-# Takes CallTreeLayout as a parameter
+# Search bar plus expand/collapse and depth controls for one CallTreeLayout.
 class CallTreeUtilLayout(QHBoxLayout):
-    def __init__(self, calltree: object):
+    def __init__(self, calltree: "CallTreeLayout"):
         super().__init__()
         self.calltree = calltree
         btn_size = QSize(25, 25)
@@ -132,28 +121,26 @@ class CallTreeLayout(QVBoxLayout):
     # Set once if networkx is unavailable, to avoid spamming the log on navigation.
     _warned_missing_networkx = False
 
-    def __init__(self, label_name: str, depth: int, is_caller: bool):
+    def __init__(self, label_name: str, depth: int, is_caller: bool, sidebar=None):
         super().__init__()
-        self._cur_func = None
-        self._is_caller = is_caller
-        self._skip_update = False
+        self.sidebar = sidebar
+        self.label_name = label_name
+        self.is_caller = is_caller
+        self.func_depth = depth
+        self.cur_func = None
+        self.binary_view = None
 
-        # Creates treeview for all the function calls
-        self._treeview = QTreeView()
-        self._model = QStandardItemModel()
-        self._proxy_model = QSortFilterProxyModel(self.treeview)
+        self.treeview = QTreeView()
+        self.model = QStandardItemModel()
+        self.proxy_model = QSortFilterProxyModel(self.treeview)
         self.proxy_model.setSourceModel(self.model)
-
         self.treeview.setModel(self.proxy_model)
         self.treeview.setExpandsOnDoubleClick(False)
 
-        # Clicking function on treeview will take you to the function
+        # Single click jumps to the call site; double click drills into the function.
         self.treeview.clicked.connect(self.goto_first_func_use)
         self.treeview.doubleClicked.connect(self.goto_func)
 
-        self._func_depth = depth
-        self._binary_view = None
-        self._label_name = label_name
         self.set_label(self.label_name)
         super().addWidget(self.treeview)
         self.util = CallTreeUtilLayout(self)
@@ -164,65 +151,6 @@ class CallTreeLayout(QVBoxLayout):
         self.proxy_model.setFilterRegularExpression(text)
         self.expand_all()
 
-    @property
-    def proxy_model(self):
-        return self._proxy_model
-
-    @property
-    def label_name(self):
-        return self._label_name
-
-    @property
-    def cur_func(self):
-        return self._cur_func
-
-    @cur_func.setter
-    def cur_func(self, cur_func):
-        self._cur_func = cur_func
-
-    @property
-    def is_caller(self):
-        return self._is_caller
-
-    @property
-    def treeview(self):
-        return self._treeview
-
-    @property
-    def model(self):
-        return self._model
-
-    @property
-    def binary_view(self):
-        return self._binary_view
-
-    @binary_view.setter
-    def binary_view(self, bv):
-        self._binary_view = bv
-
-    @property
-    def func_depth(self):
-        return self._func_depth
-
-    @func_depth.setter
-    def func_depth(self, depth):
-        self._func_depth = depth
-
-    @property
-    def skip_update(self) -> bool:
-        """
-        Tells parent view that it should skip updating the sidebar.
-        Parent will then set it True once it has been skipped
-        """
-        return self._skip_update
-
-    @skip_update.setter
-    def skip_update(self, value: bool):
-        self._skip_update = value
-
-    def get_treeview(self):
-        return self.treeview
-
     def expand_all(self):
         self.treeview.expandAll()
 
@@ -230,6 +158,8 @@ class CallTreeLayout(QVBoxLayout):
         self.treeview.collapseAll()
 
     def goto_first_func_use(self, index):
+        """Single click: navigate to where the parent calls this function, without
+        re-rooting the Current tab."""
         index = self.proxy_model.mapToSource(index)
         item = cast(BNFuncItem, self.model.itemFromIndex(index))
         bv = item.bv
@@ -248,17 +178,25 @@ class CallTreeLayout(QVBoxLayout):
             if callee.start in bv.get_callees(ref.address, ref.function):
                 break
         else:
-            # callee not found in callers
+            # callee not found among the caller's call sites
             return
 
-        self._skip_update = True
-        self._binary_view.navigate(self._binary_view.view, ref.address)
+        self._request_skip_update(True)
+        self.binary_view.navigate(self.binary_view.view, ref.address)
 
     def goto_func(self, index):
+        """Double click: navigate to the function start and let the Current tab
+        re-root onto it."""
         cur_func = self.model.itemFromIndex(self.proxy_model.mapToSource(index)).func
-        # make sure that sidebar is updated
-        self._skip_update = False
-        self._binary_view.navigate(self._binary_view.view, cur_func.start)
+        self._request_skip_update(False)
+        self.binary_view.navigate(self.binary_view.view, cur_func.start)
+
+    def _request_skip_update(self, value: bool):
+        # Tell the owning sidebar whether the next view-location change (caused by
+        # the navigate() call below) should skip re-rendering the Current tab. This
+        # works from any tab, including pinned snapshots.
+        if self.sidebar is not None:
+            self.sidebar.skip_next_update = value
 
     def _direction(self) -> str:
         """Graph traversal direction for this tree (incoming calls == callers)."""
@@ -266,7 +204,7 @@ class CallTreeLayout(QVBoxLayout):
 
     def _call_graph(self):
         """Return the shared CallGraph for the current view, or None if unavailable."""
-        bv = self._binary_view
+        bv = self.binary_view
         if bv is None:
             return None
         try:
@@ -295,16 +233,20 @@ class CallTreeLayout(QVBoxLayout):
         for neighbor in graph.neighbors(cur_func, self._direction()):
             if neighbor is None:
                 continue
-            new_std_item = BNFuncItem(self._binary_view, neighbor)
+            new_std_item = BNFuncItem(self.binary_view, neighbor)
             parent_item.appendRow(new_std_item)
 
-            if depth < self._func_depth and neighbor.start not in path:
+            if depth < self.func_depth and neighbor.start not in path:
                 self.render_calls(
                     graph, neighbor, new_std_item, depth + 1, path | {neighbor.start}
                 )
 
-    def update_widget(self, cur_func: Function):
-        if not self.treeview.isVisible():
+    def update_widget(self, cur_func: Function, force: bool = False):
+        # `force` bypasses the visibility short-circuit so callers that build a
+        # one-time snapshot (e.g. pinning a tab, whose widget is not visible yet)
+        # still render. The guard otherwise avoids expensive re-renders while the
+        # treeview is hidden during navigation.
+        if not force and not self.treeview.isVisible():
             return
 
         # Clear previous calls
@@ -318,7 +260,7 @@ class CallTreeLayout(QVBoxLayout):
         # Lazily grow the shared graph around the current function, then render the
         # tree from it. max_depth is func_depth + 1 to cover the deepest rendered row.
         graph.expand(
-            cur_func, direction=self._direction(), max_depth=self._func_depth + 1
+            cur_func, direction=self._direction(), max_depth=self.func_depth + 1
         )
 
         call_root_node = self.model.invisibleRootItem()

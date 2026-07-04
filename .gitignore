@@ -4,3 +4,4 @@ __pycache__/
 # CMake / C++ test build output
 test/build/
 build/
+.DS_Store
