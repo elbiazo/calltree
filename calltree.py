@@ -388,8 +388,27 @@ class CurrentFunctionNameLayout(QHBoxLayout):
     def _lookup_func(self):
         if self.binary_view is None:
             return None
-        funcs = self.binary_view.get_functions_by_name(self.cur_func_text.text())
-        return funcs[0] if funcs else None
+
+        text = self.cur_func_text.text()
+
+        # Fast path: exact (raw) symbol match.
+        try:
+            funcs = self.binary_view.get_functions_by_name(text)
+        except Exception:
+            funcs = []
+        if funcs:
+            return funcs[0]
+
+        # Fallback: the header shows demangled names, which may not be present as raw symbols.
+        for f in getattr(self.binary_view, "functions", ()):
+            try:
+                shown = demangle_name(self.binary_view, f.name) or f.name
+            except Exception:
+                shown = f.name
+            if shown == text:
+                return f
+
+        return None
 
     def preview_func(self, event):
         """Single click: navigate the main view to the function without re-rooting
