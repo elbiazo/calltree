@@ -186,9 +186,13 @@ CallTreeLayout (calltree.py)                    ← one tree
   (see §8). A `match_label` ("`x of y`") sits right of the search box as a persistent,
   min-width slot showing the current/total match count. The `QFrame` separator has
   spacing on both sides. The tree enables full horizontal scrolling via an
-  `Interactive` column that is sized explicitly with `_fit_column`
-  (`resizeColumnToContents` + a high `resizeContentsPrecision`),
-  `stretchLastSection=False`, `ScrollPerPixel`, and `ElideNone`.
+  `Interactive` column sized explicitly by `_fit_column` to
+  `max(content_width, viewport_width)` (`resizeColumnToContents` + a high
+  `resizeContentsPrecision`, `stretchLastSection=False`, `ScrollPerPixel`,
+  `ElideNone`). The viewport floor makes the column always fill the pane, so the
+  row/header background is uniform with no dead strip on the right; a resize-aware
+  `_CalltreeTreeView` re-applies that floor (`_on_viewport_resized`) when the pane is
+  resized, while long names still overflow into a horizontal scroll.
 - **Recursion icon.** A node that repeats an ancestor on its path (a cycle, e.g.
   `_ping → _pong → _ping`) is a non-expandable leaf marked with a QPainter-drawn
   circular-arrow icon (`_recursion_icon`, cached per layout as `_recursion_qicon`).

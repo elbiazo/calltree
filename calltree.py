@@ -1,3 +1,4 @@
+from collections import deque
 from PySide6.QtCore import QSortFilterProxyModel
 from PySide6.QtGui import (
     QStandardItemModel,
@@ -11,7 +12,7 @@ from PySide6.QtGui import (
     QPalette,
     QPolygon,
 )
-from PySide6.QtCore import QSize, Qt, QTimer, QPoint
+from PySide6.QtCore import QSize, Qt, QTimer, QPoint, QEvent
 from PySide6.QtWidgets import QTreeView
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -261,7 +262,10 @@ class CalltreeWidget(QWidget):
 
         self.in_calltree = CallTreeLayout("Incoming Calls", in_func_depth, True, sidebar)
         self.out_calltree = CallTreeLayout("Outgoing Calls", out_func_depth, False, sidebar)
-        self.cur_func_layout = CurrentFunctionNameLayout(sidebar)
+        # Match the current-function box width to the (incoming) search box.
+        self.cur_func_layout = CurrentFunctionNameLayout(
+            sidebar, width_ref=self.in_calltree.util.func_filter
+        )
         self.cur_func_text = self.cur_func_layout.cur_func_text
 
         calltree_layout = QVBoxLayout()
@@ -316,20 +320,41 @@ class CurrentFunctionNameLayout(QHBoxLayout):
     single click previews (navigate the main view without re-rooting the Current
     tab), a double click commits (navigate and re-root the Current tab)."""
 
-    def __init__(self, sidebar=None):
+    def __init__(self, sidebar=None, width_ref=None):
         super().__init__()
         self.sidebar = sidebar
+        # A widget (the search box) whose width the function box should match. When
+        # given, the function box is pinned to that width and a stretch right-aligns the
+        # buttons; otherwise the box stretches to fill the row.
+        self._width_ref = width_ref
         self.binary_view = None
         # A read-only QLineEdit (same widget/height as the search box) so the
-        # current-function row matches the search toolbar row exactly.
+        # current-function row matches the search toolbar row.
         self.cur_func_text = QLineEdit()
         self.cur_func_text.setReadOnly(True)
         self.cur_func_text.setAlignment(Qt.AlignLeft)
         self.cur_func_text.mousePressEvent = self.preview_func
         self.cur_func_text.mouseDoubleClickEvent = self.goto_func
-        super().addWidget(self.cur_func_text, 1)  # stretch so buttons stay right-aligned
-        self.setContentsMargins(0, 0, 0, 0)
+        super().addWidget(self.cur_func_text, 0 if width_ref is not None else 1)
         self._add_toolbar()
+        if width_ref is not None:
+            width_ref.installEventFilter(self)  # follow the search box's width
+            self._sync_width()
+
+    def eventFilter(self, obj, event):
+        if obj is self._width_ref and event.type() in (QEvent.Resize, QEvent.Show):
+            self._sync_width()
+        return False
+
+    def _sync_width(self):
+        if self._width_ref is None:
+            return
+        try:
+            width = self._width_ref.width()
+        except RuntimeError:
+            return  # search box was destroyed
+        if width > 0:
+            self.cur_func_text.setFixedWidth(width)
 
     def _add_toolbar(self):
         """Graph / pin / close buttons on the current-function row, right-aligned and
@@ -364,7 +389,9 @@ class CurrentFunctionNameLayout(QHBoxLayout):
         separator.setFrameShape(QFrame.VLine)
         separator.setFrameShadow(QFrame.Sunken)
 
-        # [function name ........] [graph] | [pin] [close]
+        # [function box (= search width)] [stretch] [graph] | [pin] [close]
+        if self._width_ref is not None:
+            self.addStretch(1)  # right-align the buttons when the box is fixed-width
         self.addWidget(self.graph_button)
         self.addSpacing(6)
         self.addWidget(separator)
@@ -495,6 +522,28 @@ class CallTreeUtilLayout(QHBoxLayout):
             self.calltree.update_widget(self.calltree.cur_func)
 
 
+class _CalltreeTreeView(QTreeView):
+    """QTreeView that re-applies its column width on resize *and* on show so the single
+    column keeps spanning at least the viewport (uniform row/header background, no dead
+    white strip on the right) while still overflowing into a horizontal scroll for long
+    names. The show hook matters for pinned tabs, which are built while hidden (viewport
+    width 0) and are not otherwise re-fit when first displayed."""
+
+    def __init__(self):
+        super().__init__()
+        self._on_resize = None
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._on_resize is not None:
+            self._on_resize()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._on_resize is not None:
+            self._on_resize()
+
+
 class CallTreeLayout(QVBoxLayout):
     # Set once if networkx is unavailable, to avoid spamming the log on navigation.
     _warned_missing_networkx = False
@@ -521,8 +570,9 @@ class CallTreeLayout(QVBoxLayout):
         # Bumped whenever the model is cleared/rebuilt; a running _auto_reveal captures
         # it and bails if it changes (the items it holds have been deleted underneath).
         self._build_gen = 0
+        self._content_width = 0  # widest laid-out row (see _fit_column)
 
-        self.treeview = QTreeView()
+        self.treeview = _CalltreeTreeView()
         self.model = QStandardItemModel()
         self.proxy_model = QSortFilterProxyModel(self.treeview)
         self.proxy_model.setSourceModel(self.model)
@@ -545,6 +595,8 @@ class CallTreeLayout(QVBoxLayout):
         self.treeview.doubleClicked.connect(self.goto_func)
         # Lazily populate a row's children the first time it is expanded.
         self.treeview.expanded.connect(self._on_item_expanded)
+        # Keep the column spanning the viewport as the pane is resized.
+        self.treeview._on_resize = self._on_viewport_resized
 
         self.set_label(self.label_name)
         super().addWidget(self.treeview)
@@ -708,6 +760,7 @@ class CallTreeLayout(QVBoxLayout):
         self._search_active = False  # + overrides a shown search result
         self._search_token += 1
         self._expanding = True
+        self._show_info("Loading…")  # feedback while the full (big) tree walk runs
         target, is_caller, bv = self.cur_func, self.is_caller, self.binary_view
 
         def work():
@@ -981,10 +1034,24 @@ class CallTreeLayout(QVBoxLayout):
             self._fit_column()
 
     def _fit_column(self):
-        # Size the (single) column to the widest laid-out row so the horizontal
-        # scrollbar reaches the full content. Suppressed during bulk expansion so it
+        # Size the (single) column to the widest laid-out row, but never below the
+        # viewport width, so the row / selection / header background fills the whole
+        # pane (uniform color, no dead white strip on the right) while long names still
+        # overflow into a horizontal scroll. Suppressed during bulk expansion so it
         # runs once at the end (not per row).
         self.treeview.resizeColumnToContents(0)
+        self._content_width = self.treeview.columnWidth(0)
+        self._apply_min_column_width()
+
+    def _apply_min_column_width(self):
+        viewport_w = self.treeview.viewport().width()
+        target = max(self._content_width, viewport_w)
+        if self.treeview.columnWidth(0) != target:
+            self.treeview.setColumnWidth(0, target)
+
+    def _on_viewport_resized(self):
+        # On pane resize just re-apply the min width (cheap; no content re-measure).
+        self._apply_min_column_width()
 
     def _expand_item(self, item):
         source_index = self.model.indexFromItem(item)
@@ -1005,11 +1072,13 @@ class CallTreeLayout(QVBoxLayout):
         rather than touching a freed C++ object.
         """
         gen = self._build_gen
-        queue = [self.model.item(row) for row in range(self.model.rowCount())]
+        # deque (O(1) popleft) not a list (O(n) pop(0)) so the BFS stays linear even
+        # for large auto-expand budgets (calltree.max_nodes in the thousands).
+        queue = deque(self.model.item(row) for row in range(self.model.rowCount()))
         while queue and self._node_count < budget:
             if self._build_gen != gen:
                 return  # model was rebuilt underneath us; our items are stale
-            item = queue.pop(0)
+            item = queue.popleft()
             try:
                 # Load a row's children only if the row is shallower than func_depth, so
                 # the deepest auto-created level is exactly func_depth (loading a level-N

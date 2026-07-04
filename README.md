@@ -2,11 +2,11 @@
 
 Author: **Eric Biazo**
 
-Calltree generator for function
+Calltree and Callgraph generator for function
 
 ## Description:
 
-Generates call tree. Alternative view for callgraph.
+Generates calltree and callgraph for a function.
 
 ## Releases
 
