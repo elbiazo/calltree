@@ -47,13 +47,18 @@ endforeach()
 # Catch-all target that runs the entire C++ suite in one go.
 add_test(NAME cpp_suite COMMAND calltree_unit_tests)
 
-# Optional: the standalone (no-Binary-Ninja) Python smoke test of the CallGraph
-# logic, wired into CTest when a Python interpreter is available.
+# Optional: standalone Python tests (no Binary Ninja required), wired into CTest
+# when a Python interpreter is available.
 find_program(CALLTREE_PYTHON NAMES python3 python)
 if(CALLTREE_PYTHON)
     add_test(
         NAME python_standalone_smoke
         COMMAND ${CALLTREE_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/python/standalone_smoke.py
+    )
+    add_test(
+        NAME python_demangle
+        COMMAND ${CALLTREE_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/python/test_demangle.py
     )
 endif()
